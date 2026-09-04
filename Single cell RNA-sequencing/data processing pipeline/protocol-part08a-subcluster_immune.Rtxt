@@ -1,0 +1,365 @@
+# R432
+
+# Find and label subpopulations.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+library(dplyr);
+library(viridis);
+
+if (!dir.exists("subcluster")) { dir.create("subcluster") }
+
+load("save_rdata/RM-CellsUse-IntegratedBySample.18jan2025.RData");
+ctype <- "immune";
+
+mydirX <- paste("subcluster/", ctype, sep="");
+mydirI <- paste(mydirX, "/images", sep="");
+if (!dir.exists(mydirX)) { dir.create(mydirX) }
+if (!dir.exists(mydirI)) { dir.create(mydirI) }
+
+Idents(CellsUse) <- "seurat_clusters";
+CellsChunk <- subset(CellsUse, idents=c(5,10,12,13,15,16,17));
+CellsChunk$broad_clusters <- CellsChunk$seurat_clusters;  # seurat_clusters will get overwritten later, so give the broad cluster IDs a different name
+
+table(CellsChunk$broad_clusters,CellsChunk$Sample);  ## sanity check
+#     Ctrl1 Ctrl2 SrfKO1 SrfKO2
+#  5    269   220    798    408
+#  10   205   127    327    250
+#  12    24    15    551    215
+#  13    84    68    262    168
+#  15    71    17    153     67
+#  16    62     5     80     75
+#  17    11    10     64     49
+
+### Integration by sample.
+CellsChunk[["RNA"]] <- split(CellsChunk[["RNA"]], f=CellsChunk$Sample);
+Layers(CellsChunk);
+CellsChunk <- FindVariableFeatures(CellsChunk);
+
+### try regressing out CC differences
+CellsChunk1 <- ScaleData(CellsChunk, vars.to.regress=c("CC.Difference","percent.mt"));  # features=rownames(CellsChunk));
+CellsChunk1 <- RunPCA(CellsChunk1, npcs=100);
+CellsChunk1 <- IntegrateLayers(object=CellsChunk1, method=RPCAIntegration, orig.reduction="pca", new.reduction = "integrated.rpca");
+CellsChunk1 <- JoinLayers(CellsChunk1);
+CellsChunk1 <- RunUMAP(CellsChunk1, dims=1:30, reduction = "integrated.rpca");
+pngfile1 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewBySample.png", sep="");
+pngfile2 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByGenotype.png", sep="");
+pngfile3 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewBySampleSplit.png", sep="");
+pngfile4 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByPhase.png", sep="");
+pngfile5 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByBroadCluster.png", sep="");
+png(pngfile1, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile2, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="genotype", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile3, h=1000, w=950, res=100);
+DimPlot(CellsChunk1, group.by="Sample", split.by="Sample", pt.size=0.5, reduction='umap', ncol=2)+NoLegend();
+dev.off();
+png(pngfile4, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="Phase", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile5, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="broad_clusters", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+
+### or not -- I kinda like the CCdiff UMAP version a bit better, but use this for consistency with the other subclustering
+CellsChunk2 <- ScaleData(CellsChunk, vars.to.regress=c("percent.mt"));  # features=rownames(CellsChunk));
+CellsChunk2 <- RunPCA(CellsChunk2, npcs=100);
+CellsChunk2 <- IntegrateLayers(object=CellsChunk2, method=RPCAIntegration, orig.reduction="pca", new.reduction = "integrated.rpca");
+CellsChunk2 <- JoinLayers(CellsChunk2);
+CellsChunk2 <- RunUMAP(CellsChunk2, dims=1:30, reduction = "integrated.rpca");
+pngfile1 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewBySample.png", sep="");
+pngfile2 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByGenotype.png", sep="");
+pngfile3 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewBySampleSplit.png", sep="");
+pngfile4 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByPhase.png", sep="");
+pngfile5 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByBroadCluster.png", sep="");
+png(pngfile1, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile2, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="genotype", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile3, h=1000, w=950, res=100);
+DimPlot(CellsChunk2, group.by="Sample", split.by="Sample", pt.size=0.5, reduction='umap', ncol=2)+NoLegend();
+dev.off();
+png(pngfile4, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="Phase", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile5, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="broad_clusters", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+
+txtfile <- paste(mydirX, "/UMAP-RPCA-bySample-noCC.", ctype, ".coordinates.txt", sep="");
+write.table(file=txtfile, x=as.matrix(CellsChunk2@reductions$umap@cell.embeddings), quote=F, append=F, col.names=F, sep="\t");
+
+CellsChunk <- CellsChunk2;
+rm(CellsChunk1,CellsChunk2);
+rm(pngfile1,pngfile2,pngfile3,pngfile4,pngfile5,marksTmp,marksTmpF,marksTmpTop5,txtfile1,txtfile2,txtfile3,txtfile);
+rm(CellsUse);
+
+
+### Feature plots for known immune markers. (use list based on Puja's Oct2024 dataset, plus a few more)
+DefaultAssay(CellsChunk) <- "RNA";
+genesII <- c("C1qa","C1qc","Ms4a7",  "Lyz2","Itgal","S100a4",  "Cd79a","Ebf1","Fcmr",
+             "Xcr1","Clec9a","Tlr3",   "Cd209a","Clec10a",   "Siglech","Ccr9","Cox6a2",   "Mreg","Fscn1","Ccr7",
+             "Lef1","Tcf7","Dapl1",     "Trdc","Tcrg-C1","Tcrg-V6",
+             "Cd3g","Trbc2","Tbx21","Il2rb",   "Nkg7","Ncr1","Gzma","Klre1",        "Gata3","Il1rl1",     "Fcer1a","Mcpt8","Cd200r3",
+             "S100a9","S100a8","Il1r2","Hdc",     "Sdc1","Jchain","Iglv1","Eaf2",
+             "Pclaf","Mki67","Top2a");
+#orderST <- c("macrophage","monocyte","B_cell","cDC1","cDC2","pDC","mregDC","T_cell","gdT_cell","NKT","NK","ILC2","basophil","neutrophil","plasma","CellCycle");
+for (g in 1:length(genesII)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-ImmuneMarkers.", genesII[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=genesII[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+### Feature plots for cell-cycle markers. Show only subset, since there are 41 for S phase and 51 for G2M phase in Seurat's lists.
+cellcycle.G2.genes <- c("Top2a","Aurkb","Kif11");  # G2M genes that are G2>M
+cellcycle.M.genes <- c("Ccnb2","Cdc20","Cenpf");  # G2M genes that are M>G2
+cellcycle.G2M.genes <- c("Birc5","Mki67","Tpx2"); # high in all of G2M
+cellcycle.S.genes <- c("Hells","Ung","Cdc6","Dtl");
+for (g in 1:length(cellcycle.S.genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-CellCycle-S.", cellcycle.S.genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=cellcycle.S.genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+for (g in 1:length(cellcycle.G2.genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-CellCycle-G2.", cellcycle.G2.genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=cellcycle.G2.genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+for (g in 1:length(cellcycle.M.genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-CellCycle-M.", cellcycle.M.genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=cellcycle.M.genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+for (g in 1:length(cellcycle.G2M.genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-CellCycle-G2M.", cellcycle.G2M.genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=cellcycle.G2M.genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+## UMAP by broad cluster, better resolution
+pngfile <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByBroadCluster.v2.png", sep="");
+png(pngfile, h=800, w=800, res=200);
+DimPlot(CellsChunk, group.by="broad_clusters", pt.size=0.2, label=T, reduction='umap', shuffle=TRUE)+NoLegend();
+dev.off();
+
+
+## Subclustering, all cells.
+DefaultAssay(CellsChunk) <- "RNA";
+CellsChunk <- FindNeighbors(CellsChunk, reduction='pca', dims=1:25);
+
+res <- 0.3;  # I chose the smallest resolution that split out the NKT/NK/NKprolif as I would have expected
+CellsChunk <- FindClusters(CellsChunk, resolution=res);
+pngfile <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=800, w=800, res=200);
+DimPlot(CellsChunk, group.by="ident", pt.size=0.2, label=T, reduction='umap')+NoLegend();
+dev.off();
+table(CellsChunk$seurat_clusters,CellsChunk$genotype);
+#     Ctrl SrfKO
+#  0   466   850	macrophage
+#  1    39   439	neutrophil (merge with c4 ... these are combined at res=0.2); also includes a tiny number of basophils that are near ILC2 in the UMAP
+#  2   106   358	cDC2 and mregDC
+#  3    54   278	T and NKT
+#  4     1   328	neutrophil (merge with c1 ... these are combined at res=0.2)
+#  5   215   113	NK proliferating
+#  6    88   219	gdT
+#  7     9   235	monocyte
+#  8    49   166	NK
+#  9    67   137	plasma
+#  10   54    84	cDC1
+#  11   21   111	pDC
+#  12    3   108	not sure (maybe merge with c0 ... these are combined at res=0.1)
+#  13   11    18	ILC2
+#  14    5    23	B
+table(CellsChunk$broad_clusters,CellsChunk$seurat_clusters);  # check breakdown against broad clusters (5=macro, 10=NK/NKT, 12=neutro, 13=DC, 15=T, 16=B/plasma, 17=pDC)
+#        0    1    2    3    4    5    6    7    8    9   10   11   12   13   14
+#  5  1316    1   17    0    0    0    0  241    0    3    5    0  111    0    1
+#  10    0    2    0  329    0  324    7    0  215    3    0    0    0   29    0
+#  12    0  475    0    0  329    0    0    0    0    1    0    0    0    0    0
+#  13    0    0  445    0    0    0    0    3    0    1  133    0    0    0    0
+#  15    0    0    0    3    0    4  300    0    0    1    0    0    0    0    0
+#  16    0    0    0    0    0    0    0    0    0  195    0    0    0    0   27
+#  17    0    0    2    0    0    0    0    0    0    0    0  132    0    0    0
+
+### Pull DEGs between c1 and c4 to see what stands out ... there are clearly some differential genes, but google tells me most are neutrophil markers.
+### The sample distribution is not balanced, so maybe this split reflects some sample-specific bias?
+#     Ctrl1 Ctrl2 SrfKO1 SrfKO2
+#  1     25    14    367     72
+#  4      0     1    185    143
+degfile <- paste(mydirX, "/deg.c4-vs-c1.res", res, ".txt", sep="");
+deg <- FindMarkers(CellsChunk, ident.1="4", ident.2="1", verbose=TRUE, assay="RNA", only.pos=FALSE, logfc.threshold=0);  # no minimum log2fc
+write.table(deg, file=degfile, sep="\t", quote=F, row.names=TRUE, col.names=NA);
+genes4gt1 <- c("Lrg1","Retnlg","Slfn4","Fam65b","Samhd1");
+genes1gt4 <- c("Ikbke","Lrmda","Ccl3");
+genes <- c(genes4gt1,genes1gt4);
+for (g in 1:length(genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-DiffNeutroCluster.", genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+### Possible segmented and band subtypes of neutrophils?  Nope, these don't really match up in any convincing way.
+genesN <- c("Ly6g","Itgam","Cebpe","Runx1");
+for (g in 1:length(genesN)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-DiffNeutroCluster.", genesN[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=genesN[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+### Not sure about c12, check markers to see if it should remain distinct from macrophages.
+### The top hits here don't make much sense: Fclr5 = B cell marker, Nrxn2 = medium spiny neuron, Rapgef5 = endothelial ... could these be missed doublets???
+### Also, 107 of the 111 cells are from the same sample (SrfKO1), which makes it less interesting.
+thisCluster <- 12;
+marksNow <- FindMarkers(CellsChunk, ident.1=thisCluster, grouping.var="ident", assay="RNA", only.pos=F);
+txtfile <- paste(mydirX, "/Markers-Subcluster", thisCluster, "-res", res, ".", ctype, ".txt", sep="");
+write.table(file=txtfile, x=as.matrix(marksNow), quote=F, append=F, col.names=NA, sep="\t");
+
+### Check summary metrics for QC.  Looks like c1/c4 have relatively fewer detected genes than other subclusters -- maybe a feature of neutrophils???
+pngfile <- paste(mydirI, "/Vln-Count_and_Feature.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=400, w=800, res=100);
+VlnPlot(CellsChunk, c("nCount_RNA", "nFeature_RNA"), group.by='seurat_clusters', pt.size = 0, log=T, layer="counts");
+dev.off();
+pngfile <- paste(mydirI, "/Vln-mito_ribo_hg.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=400, w=1200, res=100);
+VlnPlot(CellsChunk, c("percent.mt","percent.rp","percent.hg"), group.by='seurat_clusters', pt.size = 0, layer="counts");
+dev.off();
+
+### Sanity check: see what SingleR/ImmGen say about these.  {pretty much matches to my labels, yay}
+library(SingleR);
+library(celldex);  # for ImmGen references
+igImmRef <- celldex::ImmGenData();
+SR1_immune <- SingleR(test=as.SingleCellExperiment(CellsChunk), ref=igImmRef, labels=igImmRef$label.main);
+CellsChunk$SR_broad_ImmGen <- SR1_immune$labels;
+table(CellsChunk$seurat_clusters,CellsChunk$SR_broad_ImmGen);
+pngfile <- paste(mydirI, "/UMAP-RPCA-BySample.SingleR_broad_ImmGen.png", sep="");
+png(pngfile, h=900, w=1200, res=100);
+DimPlot(CellsChunk, group.by="SR_broad_ImmGen", pt.size=0.5, label=T, reduction='umap', shuffle=T);
+dev.off();
+txtfile <- paste(mydirX, "/FromSingleR.broad_ImmGen.txt", sep="");
+write.table(txtfile, x=as.matrix(CellsChunk$SR_broad_ImmGen), quote=F, append=F, col.names=F, sep="\t");
+SR2_immune <- SingleR(test=as.SingleCellExperiment(CellsChunk), ref=igImmRef, labels=igImmRef$label.fine);
+CellsChunk$SR_fine_ImmGen <- SR2_immune$labels;
+table(CellsChunk$seurat_clusters,CellsChunk$SR_fine_ImmGen);
+pngfile <- paste(mydirI, "/UMAP-RPCA-BySample.SingleR_fine_ImmGen.png", sep="");
+png(pngfile, h=900, w=3000, res=100);
+DimPlot(CellsChunk, group.by="SR_fine_ImmGen", pt.size=0.5, label=T, reduction='umap', shuffle=T);
+dev.off();
+txtfile <- paste(mydirX, "/FromSingleR.fine_ImmGen.txt", sep="");
+write.table(txtfile, x=as.matrix(CellsChunk$SR_fine_ImmGen), quote=F, append=F, col.names=F, sep="\t");
+
+
+### Group 1/4 (neutro) and 0/12 (macro). Rename all. Make dot plot and UMAP views. Output assign subcluster (0-14) and immune subtype.
+CellsChunk <- RenameIdents(CellsChunk, '0'="Macrophage", '12'="Macrophage", '1'="Neutrophil", '4'="Neutrophil", '2'="cDC2_mregDC", '3'="T_NKT",
+                                       '5'="ProliferatingNK", '6'="gammadeltaT", '7'="Monocyte", '8'="NK", '9'="Plasma", '10'="cDC1",
+                                       '11'="pDC", '13'="ILC2", '14'="Bcell");                      
+CellsChunk$ImmuneSubtype <- Idents(CellsChunk);
+Idents(CellsChunk) <- "ImmuneSubtype";
+orderST <- c("Macrophage","Monocyte","Bcell","Plasma","cDC1","cDC2_mregDC","pDC","gammadeltaT","T_NKT","NK","ProliferatingNK","ILC2","Neutrophil");
+# Reorder marker gene panel to match order of assigned subtypes.
+genesImm <- c("C1qa","C1qc","Ms4a7",  "Lyz2","Itgal","S100a4",  "Cd79a","Ebf1","Fcmr",   "Jchain","Iglv1","Eaf2",
+              "Xcr1","Clec9a","Tlr3",   "Cd209a","Clec10a",   "Mreg","Fscn1","Ccr7",     "Siglech","Ccr9","Cox6a2",
+              "Trdc","Tcrg-C1","Tcrg-V6",     "Lef1","Tcf7",   "Cd3g","Trbc2","Il2rb","Tbx21",    "Nkg7","Ncr1","Gzma","Klre1",   "Pclaf","Mki67","Top2a",
+              "Gata3","Il1rl1",     "S100a9","S100a8","Il1r2","Hdc");
+
+Idents(CellsChunk) <- factor(x=Idents(CellsChunk), levels=rev(orderST));
+pngfileDot <- paste(mydirI, "/DotPlot-KnownMarkers-Subtypes.", ctype, ".png", sep="");
+png(pngfileDot, h=800, w=2200, res=200);
+DotPlot(CellsChunk, features=genesImm) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+Idents(CellsChunk) <- "seurat_clusters";
+txtfileAssi <- paste(mydirX, "/AssignedSubclusters_res", res, ".", ctype, ".txt", sep="");
+write.table(txtfileAssi, x=as.matrix(Idents(CellsChunk)), quote=F, append=F, col.names=F, sep="\t");
+
+Idents(CellsChunk) <- "ImmuneSubtype";
+txtfileAssi <- paste(mydirX, "/AssignedSubtypes.", ctype, ".txt", sep="");
+write.table(txtfileAssi, x=as.matrix(Idents(CellsChunk)), quote=F, append=F, col.names=F, sep="\t");
+
+pngfileUMAP <- paste(mydirI, "/UMAP-AssignedSubtypes.", ctype, ".png", sep="");
+png(pngfileUMAP, h=800, w=750, res=200);
+DimPlot(CellsChunk, group.by="ident", pt.size=0.2, reduction='umap', shuffle=TRUE,
+        cols=c("Macrophage"="limegreen","Monocyte"="forestgreen","Bcell"="red","Plasma"="gold","cDC1"="dodgerblue","cDC2_mregDC"="blue3","pDC"="lightskyblue1",
+               "gammadeltaT"="magenta","T_NKT"="lightpink","NK"="hotpink","ProliferatingNK"="plum","ILC2"="purple1","Neutrophil"="darkorange1"))+NoLegend();
+dev.off();
+
+
+### Pull subtype markers.
+txtfile1 <- paste(mydirX, "/Marks-Subtypes.", ctype, ".all.txt", sep="");
+txtfile2 <- paste(mydirX, "/Marks-Subtypes.", ctype, ".adjp_0.01.txt", sep="");
+txtfile3 <- paste(mydirX, "/Marks-Subtypes.", ctype, ".Top5-seurat_filter.txt", sep="");
+marksTmp <- FindAllMarkers(CellsChunk, assay="RNA", only.pos=FALSE);  write.table(file=txtfile1, x=as.matrix(marksTmp), quote=F, append=F, col.names=NA, sep="\t");
+marksTmpF <- subset(marksTmp, p_val_adj<0.01);  write.table(file=txtfile2, x=as.matrix(marksTmpF), quote=F, append=F, col.names=NA, sep="\t");
+marksTmpTop5 <- marksTmpF %>% group_by(cluster) %>% top_n(n=5, wt=avg_log2FC);  write.table(file=txtfile3, x=as.matrix(marksTmpTop5), quote=F, append=F, col.names=NA, sep="\t");
+
+
+### Srf expression
+Idents(CellsChunk) <- "genotype";
+pngfile <- paste(mydirI, "/FeaturePlot-Srf-byGenotype.png", sep="");
+png(pngfile, h=900, w=1600, res=200);
+FeaturePlot(CellsChunk, features=c("Srf"), pt.size=0.2, max.cutoff=1.5)+facet_wrap('ident',ncol=2);
+dev.off();
+
+Idents(CellsChunk) <- "ImmuneSubtype";
+Idents(CellsChunk) <- factor(Idents(CellsChunk), levels=orderST);
+pngfile <- paste(mydirI, "/Violin-Srf-byGenotype.png", sep="");
+png(pngfile, h=700, w=1800, res=200);
+VlnPlot(CellsChunk, split.by="genotype", features=c("Srf"), pt.size=0, split.plot=TRUE);
+dev.off();
+pngfile <- paste(mydirI, "/Violin-Srf-byGenotype.v2.png", sep="");
+png(pngfile, h=700, w=1800, res=200);
+VlnPlot(CellsChunk, split.by="genotype", features=c("Srf"), pt.size=0.01, split.plot=TRUE);
+dev.off();
+
+
+### Clean up images and save.
+CellsImmune <- CellsChunk;
+rm(CellsChunk,ctype,g,genesII,marksTmp,marksTmpF,marksTmpTop5,mydirI,mydirX,orderST,p,pngfile,pngfileDot,pngfileUMAP,res,txtfileAssi,txtfile1,txtfile2,txtfile3);
+rm(genes,genesN,genesImm,genes1gt4,genes4gt1,cellcycle.G2.genes,cellcycle.M.genes,cellcycle.G2M.genes,cellcycle.S.genes,igImmRef,SR1_immune,SR2_immune);
+rm(deg,degfile,thisCluster,marksNow,txtfile);
+save.image("save_rdata/RM-Immune.27jan2025.RData");
+
+
+### Clean up working object and save.
+CellsImmune$RNA_snn_res.0.1 <- NULL;
+CellsImmune$RNA_snn_res.0.2 <- NULL;
+CellsImmune$RNA_snn_res.0.3 <- NULL;
+CellsImmune$RNA_snn_res.0.4 <- NULL;
+CellsImmune$RNA_snn_res.0.5 <- NULL;
+CellsImmune$RNA_snn_res.0.25 <- NULL;
+CellsImmune;
+#An object of class Seurat 
+#26486 features across 4655 samples within 1 assay 
+#Active assay: RNA (26486 features, 2000 variable features)
+# 3 layers present: data, counts, scale.data
+# 3 dimensional reductions calculated: pca, integrated.rpca, umap
+saveRDS(CellsImmune, "save_rds/RM-adult_SrfKO-Immune.03feb2025.rds");
+

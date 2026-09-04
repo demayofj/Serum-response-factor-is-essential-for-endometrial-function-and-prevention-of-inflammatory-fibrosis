@@ -1,0 +1,246 @@
+# R432
+
+## Explore the broad cell types.  Check known markers, try SingleR, etc.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+library(dplyr);
+library(viridis);
+library(SingleR);
+
+mydirX <- "broad_clusters";
+mydirI <- "broad_clusters/images";
+ctype <- "broadAuto";
+if (!dir.exists(mydirX)) { dir.create(mydirX) }
+if (!dir.exists(mydirI)) { dir.create(mydirI) }
+
+load("save_rdata/RM-CellsUse-IntegratedBySample.18jan2025.RData");
+
+load("/ddn/gs1/home/grimmsa/references/MCA_singlecell/MCA_rawCounts_withAnnotations.RData");
+mca_uterus <- subset(mcaDataAll, Tissue == "Uterus");  # all stages
+mca_uterus_fetal <- subset(mca_uterus, Stage == "Fetal");
+## layer 'data' exists but it looks identical to 'counts', so run NormalizeData on it
+mca_uterus <- NormalizeData(mca_uterus);
+mca_uterus_fetal <- NormalizeData(mca_uterus_fetal);
+sce_ref_uterus <- as.SingleCellExperiment(mca_uterus);
+sce_ref_uterus_fetal <- as.SingleCellExperiment(mca_uterus_fetal);
+rm(mcaDataAll);
+
+#SR_lin_all <- SingleR(test=as.SingleCellExperiment(CellsUse), ref=sce_ref_uterus, labels=sce_ref_uterus$CellLineage);
+#CellsUse$SR_LinAll <- SR_lin_all$labels;
+#table(CellsUse$seurat_clusters,CellsUse$SR_LinAll); 
+#pngfile <- paste(mydirX, "/UMAP-RPCA-BySample.SingleR_CellLineage_AllUterus.png", sep="");
+#png(pngfile, h=900, w=1200, res=100);
+#DimPlot(CellsUse, group.by="SR_LinAll", pt.size=0.5, label=T, reduction='umap', shuffle=T);
+#dev.off();
+#txtfile <- paste(mydirX, "/FromSingleR.Lineage_AllUterus.txt", sep="");
+#write.table(txtfile, x=as.matrix(CellsUse$SR_LinAll), quote=F, append=F, col.names=F, sep="\t");
+
+## this is a mess -- probably not a good idea to use all stages together
+SR_ctype_all <- SingleR(test=as.SingleCellExperiment(CellsUse), ref=sce_ref_uterus, labels=sce_ref_uterus$CellType);
+CellsUse$SR_CTypeAll <- SR_ctype_all$labels;
+table(CellsUse$seurat_clusters,CellsUse$SR_CTypeAll); 
+pngfile <- paste(mydirX, "/UMAP-RPCA-BySample.SingleR_CellType_AllUterus.png", sep="");
+png(pngfile, h=900, w=1200, res=100);
+DimPlot(CellsUse, group.by="SR_CTypeAll", pt.size=0.5, label=T, reduction='umap', shuffle=T);
+dev.off();
+txtfile	<- paste(mydirX, "/FromSingleR.CellType_AllUterus.txt", sep="");
+write.table(txtfile, x=as.matrix(CellsUse$SR_CTypeAll), quote=F, append=F, col.names=F, sep="\t");
+
+#SR_lin_fetal <- SingleR(test=as.SingleCellExperiment(CellsUse), ref=sce_ref_uterus_fetal, labels=sce_ref_uterus_fetal$CellLineage);
+#CellsUse$SR_LinFetal <- SR_lin_fetal$labels;
+#table(CellsUse$seurat_clusters,CellsUse$SR_LinFetal); 
+#pngfile <- paste(mydirX, "/UMAP-RPCA-BySample.SingleR_CellLineage_FetalUterus.png", sep="");
+#png(pngfile, h=900, w=1200, res=100);
+#DimPlot(CellsUse, group.by="SR_LinFetal", pt.size=0.5, label=T, reduction='umap', shuffle=T);
+#dev.off();
+#txtfile <- paste(mydirX, "/FromSingleR.Lineage_FetalUterus.txt", sep="");
+#write.table(txtfile, x=as.matrix(CellsUse$SR_LinFetal), quote=F, append=F, col.names=F, sep="\t");
+
+## suggests split between immune and endothelial (although from later info, really over-calls endothelial) but otherwise not much help
+SR_ctype_fetal <- SingleR(test=as.SingleCellExperiment(CellsUse), ref=sce_ref_uterus_fetal, labels=sce_ref_uterus_fetal$CellType);
+CellsUse$SR_CTypeFetal <- SR_ctype_fetal$labels;
+table(CellsUse$seurat_clusters,CellsUse$SR_CTypeFetal);
+pngfile <- paste(mydirX, "/UMAP-RPCA-BySample.SingleR_CellType_FetalUterus.png", sep="");
+png(pngfile, h=900, w=1200, res=100);
+DimPlot(CellsUse, group.by="SR_CTypeFetal", pt.size=0.5, label=T, reduction='umap', shuffle=T);
+dev.off();
+txtfile <- paste(mydirX, "/FromSingleR.CellType_FetalUterus.txt", sep="");
+write.table(txtfile, x=as.matrix(CellsUse$SR_CTypeFetal), quote=F, append=F, col.names=F, sep="\t");
+
+
+rm(ctype,mydirI,mydirX,pngfile,txtfile,txtfile1,txtfile2,txtfile3,txtfile,marksTmp,marksTmpF,marksTmpTop5);
+save.image("save_rdata/RM-CellsUse-IntegratedBySample-SingleR.19jan2025.RData");
+
+
+
+library(celldex);  # for ImmGen references
+igImmRef <- celldex::ImmGenData();
+SR_immune <- SingleR(test=as.SingleCellExperiment(CellsUse), ref=igImmRef, labels=igImmRef$label.main);
+CellsUse$SR_broad_ImmGen <- SR_immune$labels;
+table(CellsUse$seurat_clusters,CellsUse$SR_broad_ImmGen);
+pngfile <- paste(mydirX, "/UMAP-RPCA-BySample.SingleR_broad_ImmGen.png", sep="");
+png(pngfile, h=900, w=1200, res=100);
+DimPlot(CellsUse, group.by="SR_broad_ImmGen", pt.size=0.5, label=T, reduction='umap', shuffle=T);
+dev.off();
+txtfile <- paste(mydirX, "/FromSingleR.broad_ImmGen.txt", sep="");
+write.table(txtfile, x=as.matrix(CellsUse$SR_broad_ImmGen), quote=F, append=F, col.names=F, sep="\t");
+
+mydirIkm <- "broad_clusters/known_markers";
+if (!dir.exists(mydirIkm)) { dir.create(mydirIkm) }
+genesI <- c("C1qa","Lyz2","Cd79a","Ebf1","Iglc2",  # mac,mono,B,B,B
+            "Xcr1","Clec9a","Tlr3",   # cDC1
+            "Cd209a","Clec10a",   # cDC2
+            "Siglech","Ccr9",    # pDC
+            "Mreg","Fscn1",   # mregDC
+            "Lef1","Tcf7","Dapl1","Icos",  # T
+            "Cd3g","Trbc2",   # T and NKT
+            "Tbx21","Nkg7",   # NKT and NK
+            "Ncr1","Gzma",   # NK
+            "Gata3","Il1rl1",  # ILC2, ILC2/baso
+            "S100a9","S100a8","Il1r2",  # neutrophil
+            "Cpa3","Ms4a2","Gata2");   # basophil
+for (g in 1:length(genesI)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-ImmuneMarkers.", genesI[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesI[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+genesX <- c("Sdc1","Jchain","Iglv1","Eaf2");  # specific to plasma over other B cells
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-plasma.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+genesX <- c("Pdgfra","Mfap5","Cenpf","Diaph3");  # 0/1/6/7
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-fibro.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+genesX <- c("Clec3b","Adh1","Prss23","C1qtnf3","Zfpm2");  # 8
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-tbd.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+genesX <- c("Cdh1","Epcam");  # 3+9
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-epithelial.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+genesX <- c("Sult1d1","Cxcl15","Gpx2","Fxyd3","Slc25a48","Krt8");   # epi3 - top markers for 3 but most also in 9
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-epi3.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+genesX <- c("Pdzk1ip1","Cldn7","Krt19","Calb1","Cdh1","Plet1");   # epi9 - top markers for 9 but most also in 3
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-epi9.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+### if need more markers distinguishing 3-vs-9 epithelial, could run DEGs bewteen them ... not doing that right now
+
+genesX <- c("Pecam1","Prox1","Sema3d","Mmrn1","Reln","Ccl21a");   # 19
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-LymphEndo.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+degfile <- paste(mydirX, "/deg.c14-vs-c11.smooth_muscle.txt", sep="");
+deg <- FindMarkers(CellsUse, ident.1="14", ident.2="11", group.by="seurat_clusters", verbose=TRUE, assay="RNA", only.pos=FALSE, logfc.threshold=0);  # no minimum log2fc
+write.table(deg, file=degfile, sep="\t", quote=F, row.names=TRUE, col.names=NA);
+genesX <- c("Actg2","Cnn1");  # 14/11 common
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-SM_common.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+genesX <- c("Tnni2","Cacna1d","Jazf1","Zfpm2","Ogn","Dcn","Asic2");  # 14/11 distinct
+for (g in 1:length(genesX)) {
+  pngfile <- paste(mydirIkm, "/UMAP-GOI-SM_distinct.", genesX[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsUse, features=genesX[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+
+
+### Dot plot with selected marker genes -- dev version.
+genes <- c("Pdgfra","Mfap5","Cenpf","Diaph3","Flt1","Pecam1","Prox1","Sema3d","Rgs5","Pdgfrb","Actg2","Cnn1","Msln","Upk3b",
+           "Clec3b","Adh1","Prss23","Cdh1","Epcam","C1qa","Ms4a7","Wdfy4","Cd209a","Siglech","Ccr9","Gzma","Nkg7","Trbc2","Icos",
+           "S100a8","Il1r2","Iglc2","Cd79a");
+orderST <- c(0,1,6,7,2,19,4,11,14,18,8,3,9,5,13,17,10,15,12,16);
+CC <- CellsUse;
+Idents(CC) <- factor(Idents(CC), levels=rev(orderST));
+
+pngfile <- paste(mydirX, "/DotPlot-KnownMarkers-AssignedCellTypes-draft_20jan2025.png", sep="");
+png(pngfile, h=1400, w=2000, res=200);
+DotPlot(CC, features=genes) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+
+
+Idents(CellsUse) <- "genotype";
+pngfile <- paste(mydirX, "/FeaturePlot-Srf-byGenotype.png", sep="");
+png(pngfile, h=900, w=1600, res=200);
+FeaturePlot(CellsUse, features=c("Srf"), pt.size=0.2, max.cutoff=1.5)+facet_wrap('ident',ncol=2);
+dev.off();
+
+Idents(CC) <- "seurat_clusters";
+Idents(CC) <- factor(Idents(CC), levels=orderST);
+pngfile <- paste(mydirX, "/Violin-Srf-byGenotype.png", sep="");
+png(pngfile, h=700, w=1800, res=200);
+VlnPlot(CC, split.by="genotype", features=c("Srf"), pt.size=0, split.plot=TRUE);
+dev.off();
+pngfile <- paste(mydirX, "/Violin-Srf-byGenotype.v2.png", sep="");
+png(pngfile, h=700, w=1800, res=200);
+VlnPlot(CC, split.by="genotype", features=c("Srf"), pt.size=0.01, split.plot=TRUE);
+dev.off();
+

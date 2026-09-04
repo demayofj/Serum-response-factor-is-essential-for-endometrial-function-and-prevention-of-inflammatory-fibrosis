@@ -1,0 +1,168 @@
+# R432
+
+# Check expression of specific genes of interest.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+library(dplyr);
+library(viridis);
+
+if (!dir.exists("subcluster")) { dir.create("subcluster") }
+
+load("save_rdata/RM-CellsUse-IntegratedBySample.18jan2025.RData");
+ctype <- "smoothmuscle_and_peri";
+
+mydirX <- paste("subcluster/", ctype, sep="");
+mydirI <- paste(mydirX, "/images", sep="");
+if (!dir.exists(mydirX)) { dir.create(mydirX) }
+if (!dir.exists(mydirI)) { dir.create(mydirI) }
+
+Idents(CellsUse) <- "seurat_clusters";
+CellsChunk <- subset(CellsUse, idents=c(4,11,14));
+CellsChunk$broad_clusters <- CellsChunk$seurat_clusters;  # seurat_clusters will get overwritten later, so give the broad cluster IDs a different name
+
+table(CellsChunk$broad_clusters,CellsChunk$Sample);
+#     Ctrl1 Ctrl2 SrfKO1 SrfKO2
+#  4    664   337    360    375
+#  11   268   174    104    351
+#  14   356    85      1     32
+
+
+### Integration by sample.
+CellsChunk[["RNA"]] <- split(CellsChunk[["RNA"]], f=CellsChunk$Sample);
+Layers(CellsChunk);
+CellsChunk <- FindVariableFeatures(CellsChunk);
+
+### try regressing out CC differences
+CellsChunk1 <- ScaleData(CellsChunk, vars.to.regress=c("CC.Difference","percent.mt"));  # features=rownames(CellsChunk));
+CellsChunk1 <- RunPCA(CellsChunk1, npcs=100);
+CellsChunk1 <- IntegrateLayers(object=CellsChunk1, method=RPCAIntegration, orig.reduction="pca", new.reduction = "integrated.rpca");
+CellsChunk1 <- JoinLayers(CellsChunk1);
+CellsChunk1 <- RunUMAP(CellsChunk1, dims=1:30, reduction = "integrated.rpca");
+pngfile1 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewBySample.png", sep="");
+pngfile2 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByGenotype.png", sep="");
+pngfile3 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewBySampleSplit.png", sep="");
+pngfile4 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByPhase.png", sep="");
+pngfile5 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByBroadCluster.png", sep="");
+png(pngfile1, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile2, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="genotype", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile3, h=1000, w=950, res=100);
+DimPlot(CellsChunk1, group.by="Sample", split.by="Sample", pt.size=0.5, reduction='umap', ncol=2)+NoLegend();
+dev.off();
+png(pngfile4, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="Phase", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile5, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="broad_clusters", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+
+### or not -- not too different from above, but use this version for consistency with other subclustering (epithelial & fibroblast)
+CellsChunk2 <- ScaleData(CellsChunk, vars.to.regress=c("percent.mt"));  # features=rownames(CellsChunk));
+CellsChunk2 <- RunPCA(CellsChunk2, npcs=100);
+CellsChunk2 <- IntegrateLayers(object=CellsChunk2, method=RPCAIntegration, orig.reduction="pca", new.reduction = "integrated.rpca");
+CellsChunk2 <- JoinLayers(CellsChunk2);
+CellsChunk2 <- RunUMAP(CellsChunk2, dims=1:30, reduction = "integrated.rpca");
+pngfile1 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewBySample.png", sep="");
+pngfile2 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByGenotype.png", sep="");
+pngfile3 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewBySampleSplit.png", sep="");
+pngfile4 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByPhase.png", sep="");
+pngfile5 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByBroadCluster.png", sep="");
+png(pngfile1, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile2, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="genotype", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile3, h=1000, w=950, res=100);
+DimPlot(CellsChunk2, group.by="Sample", split.by="Sample", pt.size=0.5, reduction='umap', ncol=2)+NoLegend();
+dev.off();
+png(pngfile4, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="Phase", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile5, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="broad_clusters", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+
+txtfile <- paste(mydirX, "/UMAP-RPCA-bySample-noCC.", ctype, ".coordinates.txt", sep="");
+write.table(file=txtfile, x=as.matrix(CellsChunk2@reductions$umap@cell.embeddings), quote=F, append=F, col.names=F, sep="\t");
+
+CellsChunk <- CellsChunk2;
+rm(CellsChunk1,CellsChunk2);
+rm(pngfile1,pngfile2,pngfile3,pngfile4,pngfile5,marksTmp,marksTmpF,marksTmpTop5,txtfile1,txtfile2,txtfile3,txtfile);
+rm(CellsUse);
+
+
+### Feature plots for Ryan's gene list.
+DefaultAssay(CellsChunk) <- "RNA";
+genes <- c("Acta2","Tagln","Myh11","Cnn1","Actg2","Pdgfrb","Mcam","Nes","Susd2");
+for (g in 1:length(genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-KnownMarkers.", genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+### Also make versions split by genotype.
+Idents(CellsChunk) <- "genotype";
+for (g in 1:length(genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-KnownMarkers.", genes[g], ".byGenotype.png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=900, w=1600, res=200);
+    p <- FeaturePlot(CellsChunk, features=genes[g], pt.size=0.2)+facet_wrap('ident',ncol=2);
+    print(p);
+    dev.off();
+  }
+}
+
+### Dot plot by broad cluster.
+Idents(CellsChunk) <- "broad_clusters";
+pngfileDot <- paste(mydirI, "/DotPlot-KnownMarkers-PeriAndSM.byBroadCluster.png", sep="");
+png(pngfileDot, h=700, w=1000, res=200);
+DotPlot(CellsChunk, features=genes) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+### Dot plot by broad cluster, split by genotype.
+pngfileDot <- paste(mydirI, "/DotPlot-KnownMarkers-PeriAndSM.byBroadCluster-Genotype.png", sep="");
+png(pngfileDot, h=700, w=1000, res=200);
+DotPlot(CellsChunk, split.by="genotype", features=genes) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+### Oops, forgot that viridis doesn't work nicely with split.
+pngfileDot <- paste(mydirI, "/DotPlot-KnownMarkers-PeriAndSM.byBroadCluster-GenotypeTwoColors.png", sep="");
+png(pngfileDot, h=700, w=1000, res=200);
+DotPlot(CellsChunk, split.by="genotype", cols=c("forestgreen","mediumblue"), features=genes) + RotatedAxis() + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+
+### Rename cell type as Perivascular or SmoothMuscle based on broad cluster. No subclustering/subtyping of these, at least not for now.
+Idents(CellsChunk) <- "broad_clusters";
+CellsChunk <- RenameIdents(CellsChunk, '4'="Perivascular", '11'="SmoothMuscle", '14'="SmoothMuscle");
+CellsChunk$CellTypes <- Idents(CellsChunk);
+
+pngfileUMAP <- paste(mydirI, "/UMAP-AssignedCellTypes.", ctype, ".png", sep="");
+png(pngfileUMAP, h=800, w=750, res=200);
+DimPlot(CellsChunk, group.by="ident", pt.size=0.2, reduction='umap', shuffle=TRUE, label=T,
+        cols=c("Perivascular"="darkorange1", "SmoothMuscle"="purple1"))+NoLegend();
+dev.off();
+
+
+### Clean up image and save.
+CellsPeriSM <- CellsChunk;
+rm(CellsChunk,ctype,g,genes,mydirI,mydirX,p,pngfile,pngfileDot,pngfileUMAP);
+save.image("save_rdata/RM-PerivascularAndSmoothMuscle.03feb2025.RData");
+
+
+### Clean up working object and save.
+CellsPeriSM$RNA_snn_res.0.4 <- NULL;
+CellsPeriSM;
+#An object of class Seurat 
+#26486 features across 3107 samples within 1 assay 
+#Active assay: RNA (26486 features, 2000 variable features)
+# 3 layers present: data, counts, scale.data
+# 3 dimensional reductions calculated: pca, integrated.rpca, umap
+saveRDS(CellsPeriSM, "save_rds/RM-adult_SrfKO-SmoothMusclePerivascular.03feb2025.rds");
+

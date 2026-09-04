@@ -1,0 +1,21 @@
+# R432
+
+infile <- "doublets_scDblFinder/scDblFinder_output.txt";
+data <- read.delim(infile, header=TRUE);
+
+samples <- c("Ctrl1","Ctrl2","SrfKO1","SrfKO2");
+
+for (s in 1:length(samples)) {
+  ss <- samples[s];
+  dataD <- subset(data, (data$sample == ss & data$scDblFinderClass == "doublet"));
+  dataS <- subset(data, (data$sample == ss & data$scDblFinderClass == "singlet"));
+  dataD <- dataD[order(dataD$scDblFinderScore),];
+  dataS <- dataS[order(dataS$scDblFinderScore),];
+  dd <- rbind(dataS,dataD);
+  pngfile <- paste("doublets_scDblFinder/", ss, "-scDblFinderScore.png", sep="");
+  png(pngfile, h=600, w=600, res=100);
+  plot(x=seq(1,nrow(dataS),1), y=dataS$scDblFinderScore, col="blue", pch=20, xlim=c(0,nrow(dd)), ylim=c(0,1), xlab="Ordered Cells", ylab="scDblFinderScore", main=ss);
+  points(x=seq((nrow(dataS)+1),nrow(dd),1), y=dataD$scDblFinderScore, col="red", pch=20);
+  dev.off();
+}
+

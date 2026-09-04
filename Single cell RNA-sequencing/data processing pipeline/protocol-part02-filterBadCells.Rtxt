@@ -1,0 +1,93 @@
+# R432
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+#library(celda);         
+#library(dplyr);
+
+if (!dir.exists("initial_QC")){ dir.create("initial_QC") }
+if (!dir.exists("save_rdata")){ dir.create("save_rdata") }
+
+### Read in raw data.
+### 'foldernames' should match the contents of 'basedir'; 'samplenames' are working names for samples in this analysis
+basedir <- "CellRanger";
+foldernames <- c("Ctrl1","Ctrl2","SrfKO1","SrfKO2");
+samplenames <- foldernames;
+for(i in 1:length(foldernames)){
+  read.data <- Read10X(paste(basedir,"/",foldernames[i],"/outs/filtered_feature_bc_matrix/", sep=""));
+  colnames(read.data)<-paste(samplenames[i],colnames(read.data),sep='___');
+  tmpCells <- CreateSeuratObject(read.data,project=samplenames[i],min.features = 1,min.cells = 1);
+  print(samplenames[i]);
+  print(tmpCells);
+  if (i == 1) { Cells <- tmpCells; }
+  else { Cells <- merge(Cells, y=tmpCells); Cells[["RNA"]] <- JoinLayers(Cells[["RNA"]]); }
+  rm(tmpCells);
+  rm(read.data);
+}
+Cells$Sample <- Idents(Cells);
+table(Cells$Sample);
+# Ctrl1  Ctrl2 SrfKO1 SrfKO2 
+# 12579  10948  10527   9986 
+rm(basedir,i,foldernames,samplenames);
+
+### Fish out gene names for mito, ribosomal protein, & hemoglobin genes.
+### Calculate the % of counts that are assigned to mito, ribosomal protein, & hemoglobin genes.
+mt_genes<-union(grep("^mt",rownames(Cells),value = T),grep("^MT-",rownames(Cells),value = T));
+rp_genes<-union(union(grep("^Rpl",rownames(Cells),value = T),grep("^Rps",rownames(Cells),value = T)),union(grep("^RPL",rownames(Cells),value = T),grep("^RPS",rownames(Cells),value = T)));
+hg_genes<-union(grep("^Hb.-",rownames(Cells),value = T),grep("^HB",rownames(Cells),value = T));
+Cells$percent.mt <- 100*Matrix::colSums(GetAssayData(Cells, assay="RNA", layer="counts")[mt_genes,])/Matrix::colSums(GetAssayData(Cells, assay="RNA", layer="counts"));
+Cells$percent.rp <- 100*Matrix::colSums(GetAssayData(Cells, assay="RNA", layer="counts")[rp_genes,])/Matrix::colSums(GetAssayData(Cells, assay="RNA", layer="counts"));
+Cells$percent.hg <- 100*Matrix::colSums(GetAssayData(Cells, assay="RNA", layer="counts")[hg_genes,])/Matrix::colSums(GetAssayData(Cells, assay="RNA", layer="counts"));
+
+### General QC views before any filtering.  (v0)
+png("initial_QC/Vln-Count_and_Feature-preFilter.png", h=400, w=800, res=100);
+VlnPlot(Cells, c("nCount_RNA", "nFeature_RNA"), group.by='Sample', pt.size = 0, log=T, layer="counts");
+dev.off();
+png("initial_QC/Vln-mito_ribo_hg-preFilter.png", h=400, w=1200, res=100);
+VlnPlot(Cells, c("percent.mt","percent.rp","percent.hg"), group.by='Sample', pt.size = 0, layer="counts");
+dev.off();
+png("initial_QC/Vln-mito_zoom-preFilter.png", h=400, w=600, res=100);
+VlnPlot(Cells, c("percent.mt"), group.by='Sample', pt.size = 0, layer="counts") + coord_cartesian(ylim=c(0,10));
+dev.off();
+png("initial_QC/Vln-hg_zoom-preFilter.png", h=400, w=600, res=100);
+VlnPlot(Cells, c("percent.hg"), group.by='Sample', pt.size = 0, layer="counts") + coord_cartesian(ylim=c(0,1));
+dev.off();
+png("initial_QC/Vln-Counts_zoom-preFilter.png", h=400, w=800, res=100);
+VlnPlot(Cells, c("nCount_RNA", "nFeature_RNA"), group.by='Sample', pt.size = 0, layer="counts") + coord_cartesian(ylim=c(0,3000));
+dev.off();
+
+
+### Filter out cells with >10% mito, >%40 ribo, >0.1% hg, and <1000 detected genes.  {I usually run gene count filter after rmDoublet and DecontX, unless DecontX won't be necessary then run gene count filter here.}
+CellsF <- subset(Cells, percent.mt <= 10);
+table(CellsF$orig.ident);
+# Ctrl1  Ctrl2 SrfKO1 SrfKO2 
+# 11450   9613   9513   9168 
+
+CellsF <- subset(CellsF, percent.rp <= 40);
+table(CellsF$orig.ident);
+# Ctrl1  Ctrl2 SrfKO1 SrfKO2 
+# 11427   9584   9511   9151 
+
+CellsF <- subset(CellsF, percent.hg <= 0.1);
+table(CellsF$orig.ident);
+# Ctrl1  Ctrl2 SrfKO1 SrfKO2 
+# 11417   9511   9461   9126 
+
+CellsF <- subset(CellsF, nFeature_RNA >= 1000);
+table(CellsF$Sample);
+# Ctrl1  Ctrl2 SrfKO1 SrfKO2 
+# 10774   8915   8622   8710 
+
+
+### Write raw and passing-bad-filter cell lists.
+cellListRaw <- colnames(Cells);
+write(cellListRaw, file="initial_QC/cell_ids-all.txt", ncolumns=1);
+cellListBF <- colnames(CellsF);
+write(cellListBF, file="initial_QC/cell_ids-passBadFilter.txt", ncolumns=1);
+
+
+### Save in sce format.
+sce <- as.SingleCellExperiment(CellsF, assay="RNA");
+rm(Cells,CellsF,hg_genes,mt_genes,rp_genes,cellListRaw,cellListBF);
+save.image(file="save_rdata/RM-QC1-sce.18jan2025.RData");
+

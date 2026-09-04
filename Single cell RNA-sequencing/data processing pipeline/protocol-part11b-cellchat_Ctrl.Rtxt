@@ -1,0 +1,205 @@
+# R432
+
+## Rename cell types, pull out cells by genotype (just Ctrl here), and run through CellChat processing.
+## Skip most visualizations here.
+
+# devtools::install_github("jinworks/CellChat");
+# https://github.com/jinworks/CellChat/blob/main/tutorial/CellChat-vignette.Rmd
+
+if (!dir.exists("cellchat_outputs")) { dir.create("cellchat_outputs") }
+
+library(CellChat);
+library(patchwork);
+options(stringsAsFactors=FALSE);
+library(Seurat);
+library(NMF);
+library(ggalluvial);
+
+## Part I: Setup object and preprocessing.
+CellsUse <- readRDS("save_rds/RM-adult_SrfKO-FilteredIntegratedAnnotated.04feb2025.rds");
+CellsUse <- RenameIdents(CellsUse, 'LymphaticEndothelial'="EndoLymph", 'Endothelial'="Endothelial", 'GlandularEpithelial'="Epi-Glnd", 'ProliferatingGlandularEpithelial'="Epi-Glnd_Prolif",
+                                   'LowQualEpithelial'="Epi-LowQual", 'LuminalEpithelial'="Epi-Luminal", 'FibroblastF2'="Fibro-F2", 'FibroblastF3'="Fibro-F3", 'ProliferatingFibroblastM'="Fibro-ProlifG2M",
+                                   'ProliferatingFibroblastSG2'="Fibro-ProlifSG2", 'FibroblastUnk'="Fibro-Unk", 'Bcell'="Imm-Bcell", 'cDC2_mregDC'="Imm-cDC2_mregDC", 'cDC1'="Imm-DC1",
+                                   'gammadeltaT'="Imm-gdT", 'ILC2'="Imm-ILC2", 'Macrophage'="Imm-Macrophage", 'Monocyte'="Imm-Monocyte", 'Neutrophil'="Imm-Neutrophil", 'NK'="Imm-NK",
+                                   'ProliferatingNK'="Imm-NK_Prolif", 'pDC'="Imm-pDC", 'Plasma'="Imm-Plasma", 'T_NKT'="Imm-T_NKT", 'Mesothelial'="Mesothelial", 'Perivascular'="Perivascular",
+                                   'SmoothMuscle'="SmoothMuscle")
+CellsUse$ccname <- Idents(CellsUse);
+Idents(CellsUse) <- "ccname";
+CellsCtrl <- subset(CellsUse, subset =	genotype == "Ctrl");
+table(CellsCtrl$ccname,CellsCtrl$Sample);  # spot-check names and filter results
+unique(Idents(CellsCtrl));  # make sure current Idents are the renamed cell types
+CellsCtrl$samples <- CellsCtrl$Sample;  # the next step assumes 'samples' is in the Seurat object, so put it there
+CCobjCtrl <- createCellChat(object=CellsCtrl, group.by="ccname");
+CellChatDB <- CellChatDB.mouse;
+#png("cellchat_outputs/showDbCat_pie_charts.png", h=500, w=800, res=200);
+#showDatabaseCategory(CellChatDB);
+#dev.off();
+#dplyr::glimpse(CellChatDB$interaction);  # this shows initial entries for categories in 'interaction' types
+#CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling");  # if you want you can use a subset, like "Secreted Signaling"
+CellChatDB.use <- CellChatDB;
+CCobjCtrl@DB <- CellChatDB.use;
+CCobjCtrl <- subsetData(CCobjCtrl);
+future::plan("multicore", workers=4);
+CCobjCtrl <- identifyOverExpressedGenes(CCobjCtrl);
+CCobjCtrl <- identifyOverExpressedInteractions(CCobjCtrl);  # => "The number of highly variable ligand-receptor pairs used for signaling inference is 2911"
+rm(CellsUse,CellsCtrl);
+save.image("Working-CellChatDB-19feb2025-Ctrl-x1.RData");  ## DEV
+
+
+## Part II: Inference of cell-cell communication network.
+CCobjCtrl <- computeCommunProb(CCobjCtrl, raw.use=TRUE);
+CCobjCtrl <- filterCommunication(CCobjCtrl, min.cells=10);
+df.net.all.Ctrl <- subsetCommunication(CCobjCtrl);  # Returns data frame of all the inferred cell-cell communications at the level of ligands/receptors. Set slot.name="netP" to access inferred communications at the level of signaling pathways.
+#df.net.spec <- subsetCommunication(CCobjCtrl, sources.use=c("Macrophage","Neutrophil"), targets.use=c("FibroblastF2","FibroblastF3"));  # Returns data frame of inferred cell-cell communications from/to specific cell groups.
+#df.net.sig <- subsetCommunication(CCobjCtrl, signaling=c("TGFb","GDF"));  # Returns data frame of inferred cell-cell communications mediated by user-defined signalling.
+CCobjCtrl <- computeCommunProbPathway(CCobjCtrl);  # inferred intercellular communication network of each ligand-receptor pair and signaling pathway is stored in 'net' and 'netP' slots, respectively
+CCobjCtrl <- aggregateNet(CCobjCtrl);
+groupSize <- as.numeric(table(CCobjCtrl@idents));
+#png("cellchat_outputs/circle_view.NumberOfInteractions.Ctrl.png", h=1000, w=1000, res=100);
+#netVisual_circle(CCobjCtrl@net$count, vertex.weight=groupSize, weight.scale=T, label.edge= F, title.name="Number of interactions");
+#dev.off();
+png("cellchat_outputs/circle_view.WeightOfInteractions.Ctrl.png", h=1000, w=1000, res=100);
+netVisual_circle(CCobjCtrl@net$weight, vertex.weight=groupSize, weight.scale=T, label.edge= F, title.name="Interaction weights/strength");
+dev.off();
+#mat <- CCobjCtrl@net$weight;
+#for (i in 1:nrow(mat)) {
+#  mat2 <- matrix(0, nrow=nrow(mat), ncol=ncol(mat), dimnames=dimnames(mat));
+#  mat2[i,] <- mat[i,];
+#  pngfile <- paste("cellchat_outputs/circle_view.WeightOfInteractions.", rownames(mat)[i], ".png", sep="");
+#  png(pngfile, h=1000, w=1000, res=100);
+#  p <- netVisual_circle(mat2, vertex.weight=groupSize, weight.scale=T, edge.weight.max=max(mat), title.name=rownames(mat)[i])
+#  print(p);
+#  dev.off();
+#}
+save.image("Working-CellChatDB-19feb2025-Ctrl-x2.RData");  ## DEV
+
+
+## Part III: Visualization of cell-cell communication network
+#CCobjCtrl@netP$pathways;  # see list of pathways in object, pick one for example images
+#pathways.show <- c("NOTCH");
+#sort(unique(CCobjCtrl@idents));  # I think the index of a cell type is based on alphabetical order (see next line)
+#vertex.receiver <- c(14,17,19);  # numeric vector with index for cell types on left of hierarchy plot
+#png("cellchat_outputs/hierarchy_view.NOTCH_example.png", h=1000, w=1500, res=100);
+#netVisual_aggregate(CCobjCtrl, signaling=pathways.show, vertex.receiver=vertex.receiver, layout="hierarchy");
+#dev.off();
+#png("cellchat_outputs/circle_view.NOTCH_example.png", h=1000, w=1000, res=100);
+#netVisual_aggregate(CCobjCtrl, signaling=pathways.show, layout="circle");
+#dev.off();
+#png("cellchat_outputs/chord_view.NOTCH_example.png", h=1000, w=1000, res=100);
+#netVisual_aggregate(CCobjCtrl, signaling=pathways.show, layout="chord");
+#dev.off();
+#png("cellchat_outputs/heatmap_view.NOTCH_example.png", h=1000, w=1000, res=100);
+#netVisual_heatmap(CCobjCtrl, signaling=pathways.show, color.heatmap="Reds");
+#dev.off();
+#png("cellchat_outputs/contribution_view.NOTCH_example.png", h=1000, w=1000, res=100);
+#netAnalysis_contribution(CCobjCtrl, signaling=pathways.show);
+#dev.off();
+#pairLR.NOTCH <- extractEnrichedLR(CCobjCtrl, signaling=pathways.show, geneLR.return=FALSE);  # get significant L-R pairs for this pathway
+#pairLR.NOTCH;  # look at the list, pick one for example images
+#png("cellchat_outputs/hierarchy_view.NOTCH_LRpair_example.png", h=1000, w=1500, res=100);
+#netVisual_individual(CCobjCtrl, signaling=pathways.show, pairLR.use="JAG2_NOTCH1", vertex.receiver=vertex.receiver, layout="hierarchy");
+#dev.off();
+#png("cellchat_outputs/circle_view.NOTCH_LRpair_example.png", h=1000, w=1000, res=100);
+#netVisual_individual(CCobjCtrl, signaling=pathways.show, pairLR.use="JAG2_NOTCH1", layout="circle")
+#dev.off();
+#png("cellchat_outputs/chord_view.NOTCH_LRpair_example.png", h=1000, w=1000, res=100);
+#netVisual_individual(CCobjCtrl, signaling=pathways.show, pairLR.use="JAG2_NOTCH1", layout="chord");
+#dev.off();
+#png("cellchat_outputs/bubble_view.sourceEndothelial_all_example.png", h=1000, w=1000, res=100);
+#netVisual_bubble(CCobjCtrl, sources.use=4, targets.use=c(5,6,9,12,13,20), remove.isolate=FALSE);
+#dev.off();
+#png("cellchat_outputs/bubble_view.sourceEndothelial_selected_example.png", h=1000, w=1000, res=100);
+#netVisual_bubble(CCobjCtrl, sources.use=4, targets.use=c(5,6,9,12,13,20), signaling=c("NOTCH","SEMA7","CXCL","GAP"), remove.isolate=FALSE);
+#dev.off();
+#png("cellchat_outputs/chord_gene_view.sourceEndothelial_all_example.png", h=1000, w=1000, res=100);
+#netVisual_chord_gene(CCobjCtrl, sources.use=4, targets.use=c(5,6,9,12,13,20), lab.cex=0.5, legend.pos.y=30);
+#dev.off();
+#png("cellchat_outputs/chord_gene_view.targetEndothelial_all_example.png", h=1000, w=1000, res=100);
+#netVisual_chord_gene(CCobjCtrl, targets.use=4, sources.use=c(5,6,9), lab.cex=0.5, legend.pos.y=30);
+#dev.off();
+#png("cellchat_outputs/chord_gene_view.targetEndothelial_selected_example.png", h=1000, w=1000, res=100);
+#netVisual_chord_gene(CCobjCtrl, targets.use=4, sources.use=c(5,6,9), signaling=c("NOTCH","SEMA7","CXCL","GAP"), lab.cex=0.5, legend.pos.y=30);
+#dev.off();
+#png("cellchat_outputs/geneExpr_view.NOTCH_enriched_example.png", h=1000, w=1000, res=100);
+#plotGeneExpression(CCobjCtrl, signaling=pathways.show, enriched.only=TRUE);  # this is using 'counts', need to figure out how to point it at normalized RNA data ... or make with Seurat function instead
+#dev.off();
+#png("cellchat_outputs/geneExpr_view.NOTCH_all_example.png", h=1000, w=1000, res=100);
+#plotGeneExpression(CCobjCtrl, signaling=pathways.show, enriched.only=FALSE);   # this is using 'counts', need to figure out how to point it at normalized RNA data ... or make with Seurat function instead
+#dev.off();
+
+
+## Part IV: Systems analysis of cell-cell communication network
+CCobjCtrl <- netAnalysis_computeCentrality(CCobjCtrl, slot.name="netP");
+#png("cellchat_outputs/network_view.NOTCH_all_example.png", h=1000, w=1000, res=100);
+#netAnalysis_signalingRole_network(CCobjCtrl, signaling=pathways.show, width=18, height=4, font.size=10);
+#dev.off();
+#png("cellchat_outputs/network_scatter_view.all_example.png", h=1000, w=1000, res=100);
+#netAnalysis_signalingRole_scatter(CCobjCtrl);
+#dev.off();
+#png("cellchat_outputs/network_scatter_view.selected_example.png", h=1000, w=1000, res=100);
+#netAnalysis_signalingRole_scatter(CCobjCtrl, signaling=c("NOTCH","SEMA7","CXCL","GAP"));
+#dev.off();
+png("cellchat_outputs/network_heatmap_view.Ctrl.png", h=800, w=1200, res=100);
+ht1 <- netAnalysis_signalingRole_heatmap(CCobjCtrl, pattern="outgoing");
+ht2 <- netAnalysis_signalingRole_heatmap(CCobjCtrl, pattern="incoming");
+ht1 + ht2;
+dev.off();
+#png("cellchat_outputs/network_heatmap_view.selected_example.png", h=1000, w=2000, res=100);
+#ht1 <- netAnalysis_signalingRole_heatmap(CCobjCtrl, pattern="outgoing", signaling=c("NOTCH","SEMA7","CXCL","GAP"));
+#ht2 <- netAnalysis_signalingRole_heatmap(CCobjCtrl, pattern="incoming", signaling=c("NOTCH","SEMA7","CXCL","GAP"));
+#ht1 + ht2;
+#dev.off();
+save.image("Working-CellChatDB-19feb2025-Ctrl-x3.RData");  ## DEV
+
+png("cellchat_outputs/infer_number_of_patterns-outgoing.Ctrl.png", h=500, w=800, res=100);  # choose N at which values (suddenly) drop
+selectK(CCobjCtrl, pattern="outgoing");
+dev.off();
+nPatternsOut <- 4;  ## define based on plots!
+png("cellchat_outputs/comm_patterns-outgoing.Ctrl.png", h=1000, w=1000, res=100);
+CCobjCtrl <- identifyCommunicationPatterns(CCobjCtrl, pattern="outgoing", k=nPatternsOut);
+dev.off();
+png("cellchat_outputs/comm_patterns_river-outgoing.Ctrl.png", h=1000, w=1000, res=100);
+netAnalysis_river(CCobjCtrl, pattern="outgoing");
+dev.off();
+png("cellchat_outputs/comm_patterns_dot-outgoing.Ctrl.png", h=1000, w=2000, res=100);
+netAnalysis_dot(CCobjCtrl, pattern="outgoing");
+dev.off();
+png("cellchat_outputs/infer_number_of_patterns-incoming.Ctrl.png", h=500, w=800, res=100);  # choose N at which values (suddenly) drop
+selectK(CCobjCtrl, pattern="incoming");
+dev.off();
+nPatternsIn <- 4;  ## define based on plots!
+png("cellchat_outputs/comm_patterns-incoming.Ctrl.png", h=1000, w=1000, res=100);
+CCobjCtrl <- identifyCommunicationPatterns(CCobjCtrl, pattern="incoming", k=nPatternsIn);
+dev.off();
+png("cellchat_outputs/comm_patterns_river-incoming_Ctrl.png", h=1000, w=1000, res=100);
+netAnalysis_river(CCobjCtrl, pattern="incoming");
+dev.off();
+png("cellchat_outputs/comm_patterns_dot-incoming_Ctrl.png", h=1000, w=2000, res=100);
+netAnalysis_dot(CCobjCtrl, pattern="incoming");
+dev.off();
+save.image("Working-CellChatDB-19feb2025-Ctrl-x4.RData");  ## DEV
+
+CCobjCtrl <- computeNetSimilarity(CCobjCtrl, type="functional");
+CCobjCtrl <- netEmbedding(CCobjCtrl, type="functional", umap.method="uwot");
+CCobjCtrl <- netClustering(CCobjCtrl, type="functional");
+png("cellchat_outputs/comm_patterns_typeFunctional.Ctrl.png", h=1000, w=1000, res=100);
+netVisual_embedding(CCobjCtrl, type="functional", label.size=3.5);
+dev.off();
+png("cellchat_outputs/comm_patterns_typeFunctional-zoom.Ctrl.png", h=1000, w=1000, res=100);
+netVisual_embeddingZoomIn(CCobjCtrl, type="functional", nCol=2);
+dev.off();
+CCobjCtrl <- computeNetSimilarity(CCobjCtrl, type="structural");
+CCobjCtrl <- netEmbedding(CCobjCtrl, type="structural", umap.method="uwot");
+CCobjCtrl <- netClustering(CCobjCtrl, type="structural");
+png("cellchat_outputs/comm_patterns_typeStructural.Ctrl.png", h=1000, w=1000, res=100);
+netVisual_embedding(CCobjCtrl, type="structural", label.size=3.5);
+dev.off()
+png("cellchat_outputs/comm_patterns_typeStructural-zoom.Ctrl.png", h=1000, w=1000, res=100);
+netVisual_embeddingZoomIn(CCobjCtrl, type="structural", nCol=2);
+dev.off();
+
+
+## cleanup and save working object
+rm(nPatternsIn,nPatternsOut,CellChatDB,CellChatDB.use,groupSize,ht1,ht2);
+save.image("save_rdata/RM-CellChatDB-Ctrl.19feb2025.RData");
+

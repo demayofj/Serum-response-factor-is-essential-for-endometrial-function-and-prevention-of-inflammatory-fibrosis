@@ -1,0 +1,95 @@
+# R432
+
+### Integrate by sample for broad clustering.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+library(dplyr);
+library(viridis);
+
+mydirX <- "broad_clusters";
+mydirI <- "broad_clusters/images";
+ctype <- "broadAuto";
+if (!dir.exists(mydirX)) { dir.create(mydirX) }
+if (!dir.exists(mydirI)) { dir.create(mydirI) }
+
+load("save_rdata/RM-allCellsFilteredNormalized.18jan2025.RData");
+
+### Integration by sample.
+CellsUse[["RNA"]] <- split(CellsUse[["RNA"]], f=CellsUse$Sample);
+Layers(CellsUse);
+CellsUse <- FindVariableFeatures(CellsUse);
+CellsUse <- ScaleData(CellsUse, vars.to.regress=c("CC.Difference","percent.mt"));  # features=rownames(CellsUse));
+#Warning: Different features in new layer data than already exists for scale.data
+CellsUse <- RunPCA(CellsUse, npcs=100);
+CellsUse <- IntegrateLayers(object=CellsUse, method=RPCAIntegration, orig.reduction="pca", new.reduction = "integrated.rpca");
+CellsUse <- JoinLayers(CellsUse);
+CellsUse <- RunUMAP(CellsUse, dims=1:30, reduction = "integrated.rpca");
+png("broad_clusters/images/UMAP-RPCA-BySample.ViewBySample.png", h=500, w=570, res=100);
+DimPlot(CellsUse, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png("broad_clusters/images/UMAP-RPCA-BySample.ViewBySampleSplit.png", h=1000, w=1100, res=100);
+DimPlot(CellsUse, group.by="Sample", split.by="Sample", pt.size=0.5, reduction='umap', ncol=2)+NoLegend();
+dev.off();
+
+### Write coordinates.
+txtfile <- paste(mydirX, "/UMAP-RPCA-bySample.coordinates.", ctype, ".txt", sep="");
+write.table(file=txtfile, x=as.matrix(CellsUse@reductions$umap@cell.embeddings), quote=F, append=F, col.names=F, sep="\t");
+
+### Feature plots...
+#DefaultAssay(CellsUse) <- "RNA";
+#genes <- c("Glis1","Glis2","Glis3");
+#for (g in 1:length(genes)) {
+#  pngfile <- paste(mydirI, "/UMAP-RPCA-BySample.GOI-", genes[g], ".png", sep="");
+#  if (!file.exists(pngfile)) {
+#    png(pngfile, h=800, w=900, res=200);
+#    p <- FeaturePlot(CellsUse, features=genes[g], pt.size=0.2);
+#    print(p);
+#    dev.off();
+#  }
+#}
+
+### Clustering.
+CellsUse <- FindNeighbors(CellsUse, reduction="integrated.rpca", dims=1:30);
+res <- 0.4;
+CellsUse <- FindClusters(CellsUse, resolution=res);
+txtfileAssi <- paste(mydirX, "/AssignedClusters_res", res, ".RPCA-BySample.txt", sep="");
+pngfileUMAP <- paste(mydirI, "/UMAP-RPCA-BySample.ViewByClusters_res", res, ".png", sep="");
+write.table(txtfileAssi, x=as.matrix(Idents(CellsUse)), quote=F, append=F, col.names=F, sep="\t");
+png(pngfileUMAP, h=500, w=500, res=100);
+DimPlot(CellsUse, group.by="ident", pt.size=0.5, label=T, reduction='umap')+NoLegend();
+dev.off();
+
+### Violins by cluster.
+pngfileVln <- paste(mydirI, "/violin-Count_and_Feature-IntBySample.", ctype, ".res", res, ".png", sep="");
+png(pngfileVln, h=400, w=800, res=100);
+VlnPlot(CellsUse, c("nCount_RNA", "nFeature_RNA"), pt.size = 0, log=T);
+dev.off();
+pngfileVln <- paste(mydirI, "/violin-mt_rp_hg-IntBySample.", ctype, ".res", res, ".png", sep="");
+png(pngfileVln, h=400, w=1200, res=100);
+VlnPlot(CellsUse, c("percent.mt","percent.rp","percent.hg"), pt.size = 0, log=F);
+dev.off();
+
+### Get cluster markers.
+txtfile1 <- paste(mydirX, "/Marks-", ctype, "-res", res, ".all.txt", sep="");
+txtfile2 <- paste(mydirX, "/Marks-", ctype, "-res", res, ".adjp_0.01.txt", sep="");
+txtfile3 <- paste(mydirX, "/Marks-", ctype, "-res", res, ".Top5-seurat_filter.txt", sep="");
+marksTmp <- FindAllMarkers(CellsUse, assay="RNA", only.pos=FALSE);  write.table(file=txtfile1, x=as.matrix(marksTmp), quote=F, append=F, col.names=NA, sep="\t");
+marksTmpF <- subset(marksTmp, p_val_adj<0.01);  write.table(file=txtfile2, x=as.matrix(marksTmpF), quote=F, append=F, col.names=NA, sep="\t");
+marksTmpTop5 <- marksTmpF %>% group_by(cluster) %>% top_n(n=5, wt=avg_log2FC);  write.table(file=txtfile3, x=as.matrix(marksTmpTop5), quote=F, append=F, col.names=NA, sep="\t");
+
+table(CellsUse$seurat_clusters,CellsUse$Sample);
+
+rm(ctype,mydirI,mydirX,pngfileUMAP,pngfileVln,res,txtfile,txtfileAssi); # txtfile1,txtfile2,txtfile3,txtfile,marksTmp,marksTmpF,marksTmpTop5);
+save.image("save_rdata/RM-CellsUse-IntegratedBySample.18jan2025.RData");
+
+
+
+orderST <- c(0,1,6,7,2,19,4,11,14,18,8,3,9,5,13,17,10,15,12,16);
+CC <- CellsUse;
+Idents(CC) <- factor(Idents(CC), levels=rev(orderST));
+pngfile <- paste(mydirI, "/DotPlot-Mesenchymal-BroadClusters.png", sep="");
+png(pngfile, h=1500, w=1000, res=200);
+DotPlot(CC, features=c("Pdgfra","Pdgfrb","Acta2","Vim")) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+

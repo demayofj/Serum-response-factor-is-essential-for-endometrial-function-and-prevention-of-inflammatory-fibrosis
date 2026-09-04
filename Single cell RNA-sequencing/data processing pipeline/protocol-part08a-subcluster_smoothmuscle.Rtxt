@@ -1,0 +1,237 @@
+# R432
+
+### NOTE: Did not use this in the end -- see smooth muscle + perivascular version.
+
+# Find and label subpopulations.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+library(dplyr);
+library(viridis);
+
+if (!dir.exists("subcluster")) { dir.create("subcluster") }
+
+load("save_rdata/RM-CellsUse-IntegratedBySample.18jan2025.RData");
+ctype <- "smoothmuscle";
+
+mydirX <- paste("subcluster/", ctype, sep="");
+mydirI <- paste(mydirX, "/images", sep="");
+if (!dir.exists(mydirX)) { dir.create(mydirX) }
+if (!dir.exists(mydirI)) { dir.create(mydirI) }
+
+Idents(CellsUse) <- "seurat_clusters";
+CellsChunk <- subset(CellsUse, idents=c(11,14));
+CellsChunk$broad_clusters <- CellsChunk$seurat_clusters;  # seurat_clusters will get overwritten later, so give the broad cluster IDs a different name
+
+table(CellsChunk$broad_clusters,CellsChunk$Sample);
+#     Ctrl1 Ctrl2 SrfKO1 SrfKO2
+#  11   268   174    104    351
+#  14   356    85      1     32
+
+
+### Integration by sample.
+CellsChunk[["RNA"]] <- split(CellsChunk[["RNA"]], f=CellsChunk$Sample);
+Layers(CellsChunk);
+CellsChunk <- FindVariableFeatures(CellsChunk);
+
+### try regressing out CC differences
+CellsChunk1 <- ScaleData(CellsChunk, vars.to.regress=c("CC.Difference","percent.mt"));  # features=rownames(CellsChunk));
+CellsChunk1 <- RunPCA(CellsChunk1, npcs=100);
+CellsChunk1 <- IntegrateLayers(object=CellsChunk1, method=RPCAIntegration, orig.reduction="pca", new.reduction = "integrated.rpca");
+CellsChunk1 <- JoinLayers(CellsChunk1);
+CellsChunk1 <- RunUMAP(CellsChunk1, dims=1:30, reduction = "integrated.rpca");
+pngfile1 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewBySample.png", sep="");
+pngfile2 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByGenotype.png", sep="");
+pngfile3 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewBySampleSplit.png", sep="");
+pngfile4 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByPhase.png", sep="");
+pngfile5 <- paste(mydirI, "/UMAP-RPCA-bySample-CCdiff.", ctype, ".ViewByBroadCluster.png", sep="");
+png(pngfile1, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile2, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="genotype", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile3, h=1000, w=950, res=100);
+DimPlot(CellsChunk1, group.by="Sample", split.by="Sample", pt.size=0.5, reduction='umap', ncol=2)+NoLegend();
+dev.off();
+png(pngfile4, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="Phase", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile5, h=500, w=570, res=100);
+DimPlot(CellsChunk1, group.by="broad_clusters", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+
+### or not -- this is pretty much the same as above, but use this version for consistency with other subclustering (epithelial & fibroblast)
+CellsChunk2 <- ScaleData(CellsChunk, vars.to.regress=c("percent.mt"));  # features=rownames(CellsChunk));
+CellsChunk2 <- RunPCA(CellsChunk2, npcs=100);
+CellsChunk2 <- IntegrateLayers(object=CellsChunk2, method=RPCAIntegration, orig.reduction="pca", new.reduction = "integrated.rpca");
+CellsChunk2 <- JoinLayers(CellsChunk2);
+CellsChunk2 <- RunUMAP(CellsChunk2, dims=1:30, reduction = "integrated.rpca");
+pngfile1 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewBySample.png", sep="");
+pngfile2 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByGenotype.png", sep="");
+pngfile3 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewBySampleSplit.png", sep="");
+pngfile4 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByPhase.png", sep="");
+pngfile5 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByBroadCluster.png", sep="");
+png(pngfile1, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile2, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="genotype", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile3, h=1000, w=950, res=100);
+DimPlot(CellsChunk2, group.by="Sample", split.by="Sample", pt.size=0.5, reduction='umap', ncol=2)+NoLegend();
+dev.off();
+png(pngfile4, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="Phase", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile5, h=500, w=570, res=100);
+DimPlot(CellsChunk2, group.by="broad_clusters", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+
+txtfile <- paste(mydirX, "/UMAP-RPCA-bySample-noCC.", ctype, ".coordinates.txt", sep="");
+write.table(file=txtfile, x=as.matrix(CellsChunk2@reductions$umap@cell.embeddings), quote=F, append=F, col.names=F, sep="\t");
+
+CellsChunk <- CellsChunk2;
+rm(CellsChunk1,CellsChunk2);
+rm(pngfile1,pngfile2,pngfile3,pngfile4,pngfile5,marksTmp,marksTmpF,marksTmpTop5,txtfile1,txtfile2,txtfile3,txtfile);
+rm(CellsUse);
+
+
+### Feature plots for markers from broad clustering, and a few other known markers.
+DefaultAssay(CellsChunk) <- "RNA";
+genesB <- c("Actg2","Cnn1","Tnni2","Asic2","Acta2","Tagln","Myh11")
+for (g in 1:length(genesB)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-BroadMarkers.", genesB[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=genesB[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+### Feature plots for cell-cycle markers. Show only subset, since there are 41 for S phase and 51 for G2M phase in Seurat's lists.
+### Based on 'by phase' plot, guessing not really much going on with these, but doing a quick check to be sure.
+cellcycle.G2.genes <- c("Top2a","Aurkb","Kif11");  # G2M genes that are G2>M
+cellcycle.M.genes <- c("Ccnb2","Cdc20","Cenpf");  # G2M genes that are M>G2
+cellcycle.G2M.genes <- c("Birc5","Mki67","Tpx2"); # high in all of G2M
+cellcycle.S.genes <- c("Hells","Ung","Cdc6","Dtl");
+for (g in 1:length(cellcycle.S.genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-CellCycle-S.", cellcycle.S.genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=cellcycle.S.genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+for (g in 1:length(cellcycle.G2.genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-CellCycle-G2.", cellcycle.G2.genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=cellcycle.G2.genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+for (g in 1:length(cellcycle.M.genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-CellCycle-M.", cellcycle.M.genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=cellcycle.M.genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+for (g in 1:length(cellcycle.G2M.genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-CellCycle-G2M.", cellcycle.G2M.genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunk, features=cellcycle.G2M.genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+## UMAP by broad cluster, better resolution
+pngfile <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByBroadCluster.v2.png", sep="");
+png(pngfile, h=800, w=800, res=200);
+DimPlot(CellsChunk, group.by="broad_clusters", pt.size=0.2, label=T, reduction='umap', shuffle=TRUE)+NoLegend();
+dev.off();
+
+
+## Subclustering, all cells.
+DefaultAssay(CellsChunk) <- "RNA";
+CellsChunk <- FindNeighbors(CellsChunk, reduction='pca', dims=1:25);
+
+res <- 0.2;
+CellsChunk <- FindClusters(CellsChunk, resolution=res);
+pngfile <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=800, w=800, res=200);
+DimPlot(CellsChunk, group.by="ident", pt.size=0.2, label=T, reduction='umap')+NoLegend();
+dev.off();
+table(CellsChunk$seurat_clusters,CellsChunk$genotype);
+#    Ctrl SrfKO
+#  0  422   130
+#  1  454    35
+#  2    6   261
+#  3    1    62
+table(CellsChunk$seurat_clusters,CellsChunk$Sample);
+#    Ctrl1 Ctrl2 SrfKO1 SrfKO2
+#  0   250   172     39     91
+#  1   370    84      1     34
+#  2     3     3     64    197
+#  3     1     0      1     61
+table(CellsChunk$broad_clusters,CellsChunk$seurat_clusters);  # check breakdown against broad clusters
+#       0   1   2   3
+#  11 551  16 267  63
+#  14   1 473   0   0
+
+pngfile <- paste(mydirI, "/Vln-Count_and_Feature.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=400, w=800, res=100);
+VlnPlot(CellsChunk, c("nCount_RNA", "nFeature_RNA"), group.by='seurat_clusters', pt.size = 0, log=T, layer="counts");
+dev.off();
+pngfile <- paste(mydirI, "/Vln-mito_ribo_hg.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=400, w=1200, res=100);
+VlnPlot(CellsChunk, c("percent.mt","percent.rp","percent.hg"), group.by='seurat_clusters', pt.size = 0, layer="counts");
+dev.off();
+
+### Not sure what any of these are. Pull subcluster markers. See what Ryan thinks about these.
+txtfile1 <- paste(mydirX, "/Marks-Subclusters_res", res, ".", ctype, ".all.txt", sep="");
+txtfile2 <- paste(mydirX, "/Marks-Subclusters_res", res, ".", ctype, ".adjp_0.01.txt", sep="");
+txtfile3 <- paste(mydirX, "/Marks-Subclusters_res", res, ".", ctype, ".Top5-seurat_filter.txt", sep="");
+marksTmp <- FindAllMarkers(CellsChunk, assay="RNA", only.pos=FALSE);  write.table(file=txtfile1, x=as.matrix(marksTmp), quote=F, append=F, col.names=NA, sep="\t");
+marksTmpF <- subset(marksTmp, p_val_adj<0.01);  write.table(file=txtfile2, x=as.matrix(marksTmpF), quote=F, append=F, col.names=NA, sep="\t");
+marksTmpTop5 <- marksTmpF %>% group_by(cluster) %>% top_n(n=5, wt=avg_log2FC);  write.table(file=txtfile3, x=as.matrix(marksTmpTop5), quote=F, append=F, col.names=NA, sep="\t");
+
+### Dot plot with expected smooth muscle marker genes.
+DefaultAssay(CellsChunk) <- "RNA";
+genes <- c("Acta2","Actg2","Cnn1","Tagln","Myh11")
+pngfileDot <- paste(mydirI, "/DotPlot-KnownMarkers-Subclusters_res", res, ".", ctype, ".png", sep="");
+png(pngfileDot, h=800, w=800, res=200);
+DotPlot(CellsChunk, features=genes) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+### Dot plot with top 10 markers of broad clusters c11 and c14.
+genes <- c("Zfpm2","Cacnb2","Pcp4","Rspo3","Asic2","Id4","Syndig1","Ptgis","Myocd","Myh11","Lmod1","Fbxl22","Sh3bgr","Kcnip1","Tagln","Jph2","Ptger3","Acta2");  # Myocd and Myh11 in top 10 of both 
+pngfileDot <- paste(mydirI, "/DotPlot-Top10BroadMarkers-Subclusters_res", res, ".", ctype, ".png", sep="");
+png(pngfileDot, h=800, w=2000, res=200);
+DotPlot(CellsChunk, features=genes) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+### Dot plot with a few top markers of each subcluster; tried to find ones with pct.2 < 50.
+genes <- c("Postn","Prune2","Ccnd1","Kcnn2","Id4",   # subc0
+           "Tnni2","Tes","Cacna1d","Trhde","Epb41l3",   # subc1
+           "Lum","Me3","Ampd3","Greb1","C1qtnf7",   # subc2
+           "Bmper","Emb","Lsamp","Hhip","Unc13c");   # subc3
+pngfileDot <- paste(mydirI, "/DotPlot-Top5SubclusterMarkers-Subclusters_res", res, ".", ctype, ".png", sep="");
+png(pngfileDot, h=800, w=2000, res=200);
+DotPlot(CellsChunk, features=genes) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+
+
+
+save.image("Working-smoothmuscle-28jan2025.RData");
+
+

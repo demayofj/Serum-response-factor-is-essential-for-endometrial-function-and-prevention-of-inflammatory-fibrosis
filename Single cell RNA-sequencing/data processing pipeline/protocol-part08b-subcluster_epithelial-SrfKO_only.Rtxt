@@ -1,0 +1,178 @@
+# R432
+
+# Find and label subpopulations.
+# Objective: check degree of separation of the glandular and luminal subtypes.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+library(dplyr);
+library(viridis);
+
+if (!dir.exists("subcluster")) { dir.create("subcluster") }
+
+load("save_rdata/RM-Epithelial.27jan2025.RData");
+ctype <- "epithelial_SrfKO";
+
+mydirX <- paste("subcluster/", ctype, sep="");
+mydirI <- paste(mydirX, "/images", sep="");
+if (!dir.exists(mydirX)) { dir.create(mydirX) }
+if (!dir.exists(mydirI)) { dir.create(mydirI) }
+
+CellsChunkKO <- subset(CellsEpi, subset = genotype == "SrfKO");
+
+table(CellsChunkKO$Sample);
+# Ctrl1  Ctrl2 SrfKO1 SrfKO2 
+#     0      0   1757   1013 
+
+### Integration by sample.
+CellsChunkKO[["RNA"]] <- split(CellsChunkKO[["RNA"]], f=CellsChunkKO$Sample);
+Layers(CellsChunkKO);
+CellsChunkKO <- FindVariableFeatures(CellsChunkKO);
+
+### ignore cell cycle differences (for consistency)
+CellsChunkKO <- ScaleData(CellsChunkKO, vars.to.regress=c("percent.mt"));  # features=rownames(CellsChunkKO));
+CellsChunkKO <- RunPCA(CellsChunkKO, npcs=100);
+CellsChunkKO <- IntegrateLayers(object=CellsChunkKO, method=RPCAIntegration, orig.reduction="pca", new.reduction = "integrated.rpca");
+CellsChunkKO <- JoinLayers(CellsChunkKO);
+CellsChunkKO <- RunUMAP(CellsChunkKO, dims=1:30, reduction = "integrated.rpca");
+pngfile1 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewBySample.png", sep="");
+pngfile2 <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByPhase.png", sep="");
+png(pngfile1, h=500, w=570, res=100);
+DimPlot(CellsChunkKO, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png(pngfile2, h=500, w=570, res=100);
+DimPlot(CellsChunkKO, group.by="Phase", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+
+txtfile <- paste(mydirX, "/UMAP-RPCA-bySample-noCC.", ctype, ".coordinates.txt", sep="");
+write.table(file=txtfile, x=as.matrix(CellsChunkKO@reductions$umap@cell.embeddings), quote=F, append=F, col.names=F, sep="\t");
+
+rm(pngfile1,pngfile2,txtfile,CellsEpi);
+
+
+### Feature plots for known (broad) markers.
+DefaultAssay(CellsChunkKO) <- "RNA";
+genesB <- c("Epcam","Cdh1","Cxcl15","Calb1");
+for (g in 1:length(genesB)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-BroadMarkers.", genesB[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunkKO, features=genesB[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+### Feature plots for potential glandular/luminal markers.
+DefaultAssay(CellsChunkKO) <- "RNA";
+genes <- c("Wif1","Foxa2","Cxcl15","Spink1");  # glandular
+genes <- c(genes,"Tacstd2","Wnt7a","Lpar3","Calb1");  #luminal
+genes <- c(genes,"Muc1","Esr1","Pgr");  # both
+for (g in 1:length(genes)) {
+  pngfile <- paste(mydirI, "/UMAP-GOI-Markers.", genes[g], ".png", sep="");
+  if (!file.exists(pngfile)) {
+    png(pngfile, h=800, w=900, res=200);
+    p <- FeaturePlot(CellsChunkKO, features=genes[g], pt.size=0.2);
+    print(p);
+    dev.off();
+  }
+}
+
+## UMAP by assigned epithelial subtype in Ctrl+SrfKO version
+pngfile <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".ViewByEpiSubtype.png", sep="");
+png(pngfile, h=800, w=800, res=200);
+DimPlot(CellsChunkKO, group.by="EpiSubtype", pt.size=0.2, label=F, reduction='umap', shuffle=TRUE,
+        cols=c("GlandularEpithelial"="gold","ProliferatingGlandularEpithelial"="darkorange1","LuminalEpithelial"="mediumorchid","LowQualEpithelial"="seagreen"))+NoLegend();
+dev.off();
+
+
+genesDotPlot <- c(genes,"Hells","Mki67");  # add cell cycle markers to epithelial list
+
+
+## Subclustering.  Make dot plots with potential glandular/luminal markers.
+DefaultAssay(CellsChunkKO) <- "RNA";
+CellsChunkKO <- FindNeighbors(CellsChunkKO, reduction='pca', dims=1:25);
+
+res <- 0.2;
+CellsChunkKO <- FindClusters(CellsChunkKO, resolution=res);
+pngfile <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=800, w=800, res=200);
+DimPlot(CellsChunkKO, group.by="ident", pt.size=0.2, label=T, reduction='umap')+NoLegend();
+dev.off();
+table(CellsChunkKO$seurat_clusters,CellsChunkKO$Sample);
+#    Ctrl1 Ctrl2 SrfKO1 SrfKO2
+#  0     0     0    931    470
+#  1     0     0    654    273
+#  2     0     0    172    270
+table(CellsChunkKO$EpiSubtype,CellsChunkKO$seurat_clusters);
+#                                      0    1    2
+#  GlandularEpithelial              1380  110   11
+#  ProliferatingGlandularEpithelial    2    1  431
+#  LuminalEpithelial                   8  816    0
+#  LowQualEpithelial                  11    0    0
+orderST <- c(0,1,2);
+CC <- CellsChunkKO;
+Idents(CC) <- factor(Idents(CC), levels=rev(orderST));
+pngfile <- paste(mydirI, "/DotPlot-EpithelialMarkers-Subclusters_res", res, ".", ctype, ".png", sep="");
+png(pngfile, h=700, w=1200, res=200);
+DotPlot(CC, features=genesDotPlot) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+res <- 0.15;
+CellsChunkKO <- FindClusters(CellsChunkKO, resolution=res);
+pngfile <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=800, w=800, res=200);
+DimPlot(CellsChunkKO, group.by="ident", pt.size=0.2, label=T, reduction='umap')+NoLegend();
+dev.off();
+table(CellsChunkKO$seurat_clusters,CellsChunkKO$Sample);
+#    Ctrl1 Ctrl2 SrfKO1 SrfKO2
+#  0     0     0   1121    551
+#  1     0     0    466    194
+#  2     0     0    170    268
+table(CellsChunkKO$EpiSubtype,CellsChunkKO$seurat_clusters);
+#                                      0    1    2
+#  GlandularEpithelial              1488    5    8
+#  ProliferatingGlandularEpithelial    4    0  430
+#  LuminalEpithelial                 169  655    0
+#  LowQualEpithelial                  11    0    0
+orderST <- c(0,1,2);
+CC <- CellsChunkKO;
+Idents(CC) <- factor(Idents(CC), levels=rev(orderST));
+pngfile <- paste(mydirI, "/DotPlot-EpithelialMarkers-Subclusters_res", res, ".", ctype, ".png", sep="");
+png(pngfile, h=700, w=1200, res=200);
+DotPlot(CC, features=genesDotPlot) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+res <- 0.25;
+CellsChunkKO <- FindClusters(CellsChunkKO, resolution=res);
+pngfile <- paste(mydirI, "/UMAP-RPCA-bySample-noCC.", ctype, ".subcluster-res", res, ".png", sep="");
+png(pngfile, h=800, w=800, res=200);
+DimPlot(CellsChunkKO, group.by="ident", pt.size=0.2, label=T, reduction='umap')+NoLegend();
+dev.off();
+table(CellsChunkKO$seurat_clusters,CellsChunkKO$Sample);
+#    Ctrl1 Ctrl2 SrfKO1 SrfKO2
+#  0     0     0    913    454
+#  1     0     0    672    289
+#  2     0     0    172    270
+table(CellsChunkKO$EpiSubtype,CellsChunkKO$seurat_clusters);
+#                                      0    1    2
+#  GlandularEpithelial              1348  142   11
+#  ProliferatingGlandularEpithelial    2    1  431
+#  LuminalEpithelial                   6  818    0
+#  LowQualEpithelial                  11    0    0
+orderST <- c(0,1,2);
+CC <- CellsChunkKO;
+Idents(CC) <- factor(Idents(CC), levels=rev(orderST));
+pngfile <- paste(mydirI, "/DotPlot-EpithelialMarkers-Subclusters_res", res, ".", ctype, ".png", sep="");
+png(pngfile, h=700, w=1200, res=200);
+DotPlot(CC, features=genesDotPlot) + RotatedAxis() + scale_color_viridis(option="D") + theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) + ylab('') + xlab('');
+dev.off();
+
+
+## Reset seurat_clusters to res=0.2.
+res <- 0.2;
+CellsChunkKO <- FindClusters(CellsChunkKO, resolution=res);
+
+
+rm(CC,ctype,g,genes,genesB,genesDotPlot,mydirI,mydirX,orderST,p,pngfile,res);
+save.image("save_rdata/RM-Epithelial_SrfKO.28jan2025.RData");
+

@@ -1,0 +1,26 @@
+## R432
+
+## Run SoupX on raw (unfiltered) cells.
+
+#install.packages('SoupX');
+
+library(SoupX);  # v1.6.2
+
+
+## scRNA samples
+xx <- load10X("CellRanger/Ctrl1/outs");
+xx <- autoEstCont(xx);  # Estimated global rho of 0.02
+rm(xx);
+
+xx <- load10X("CellRanger/Ctrl2/outs");
+xx <- autoEstCont(xx);  # Estimated global rho of 0.02
+rm(xx);
+
+xx <- load10X("CellRanger/SrfKO1/outs");
+xx <- autoEstCont(xx);  # Estimated global rho of 0.03
+rm(xx);
+
+xx <- load10X("CellRanger/SrfKO2/outs");
+xx <- autoEstCont(xx);  # Estimated global rho of 0.02
+rm(xx);
+

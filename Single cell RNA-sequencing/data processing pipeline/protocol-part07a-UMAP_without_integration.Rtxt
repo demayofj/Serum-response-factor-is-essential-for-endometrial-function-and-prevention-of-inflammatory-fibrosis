@@ -1,0 +1,33 @@
+# R432
+
+### Integrate by sample for broad clustering.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+library(dplyr);
+library(viridis);
+
+mydirX <- "broad_clusters";
+mydirI <- "broad_clusters/images";
+ctype <- "broadAuto";
+if (!dir.exists(mydirX)) { dir.create(mydirX) }
+if (!dir.exists(mydirI)) { dir.create(mydirI) }
+
+load("save_rdata/RM-allCellsFilteredNormalized.18jan2025.RData");
+
+### Simple combined UMAP (no integration).
+CellsUse <- FindVariableFeatures(CellsUse);
+CellsUse <- RunPCA(CellsUse, npcs=100);
+CellsUse <- RunUMAP(CellsUse, dims=1:30, reduction="pca");
+
+png("broad_clusters/images/UMAP-NotIntegrated.ViewBySample.png", h=500, w=570, res=100);
+DimPlot(CellsUse, group.by="Sample", pt.size=0.5, reduction='umap', shuffle=TRUE);
+dev.off();
+png("broad_clusters/images/UMAP-NotIntegrated.ViewBySampleSplit.png", h=1000, w=1100, res=100);
+DimPlot(CellsUse, group.by="Sample", split.by="Sample", pt.size=0.5, reduction='umap', ncol=2)+NoLegend();
+dev.off();
+
+### Write coordinates.
+txtfile <- paste(mydirX, "/UMAP-NotIntegrated.coordinates.", ctype, ".txt", sep="");
+write.table(file=txtfile, x=as.matrix(CellsUse@reductions$umap@cell.embeddings), quote=F, append=F, col.names=F, sep="\t");
+

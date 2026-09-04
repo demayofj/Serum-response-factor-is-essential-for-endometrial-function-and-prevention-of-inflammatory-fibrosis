@@ -1,0 +1,130 @@
+# R432
+
+# https://saezlab.github.io/liana/
+# https://saezlab.github.io/liana/articles/liana_tutorial.html
+#
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#if (!requireNamespace("remotes", quietly = TRUE))
+#    install.packages("remotes")
+#remotes::install_github('saezlab/liana');
+### This installed without issue. I did not update versions in use of any of the dependencies that were already installed.
+
+if (!dir.exists("liana_outputs")) { dir.create("liana_outputs") }
+
+library(liana);
+library(tidyverse);
+library(magrittr);
+library(Seurat);
+library(circlize);
+library(scales);
+
+show_resources();
+# [1] "Default"          "Consensus"        "Baccin2019"       "CellCall"        
+# [5] "CellChatDB"       "Cellinker"        "CellPhoneDB"      "CellTalkDB"      
+# [9] "connectomeDB2020" "EMBRACE"          "Guide2Pharma"     "HPMR"            
+#[13] "ICELLNET"         "iTALK"            "Kirouac2010"      "LRdb"            
+#[17] "Ramilowski2015"   "OmniPath"         "MouseConsensus"  
+
+show_methods();
+# [1] "connectome"      "logfc"           "natmi"           "sca"            
+# [5] "cellphonedb"     "cytotalk"        "call_squidpy"    "call_cellchat"  
+# [9] "call_connectome" "call_sca"        "call_italk"      "call_natmi"     
+
+
+CellsUse <- readRDS("save_rds/RM-adult_SrfKO-FilteredIntegratedAnnotated.04feb2025.rds");
+CellsUse %>% dplyr::glimpse();
+unique(Idents(CellsUse));  # make sure cell types are current Idents
+
+### Test the functions. Will later want to split by genotype for 'real' analysis.
+### Use 'MouseConsensus'; tool is written for human genes, need to convert orthologs yourself if not using the pre-established mouse one.
+### Pick some cell types for example images...
+#liana_test <- liana_wrap(CellsUse, resource="MouseConsensus");
+#liana_test %>% dplyr::glimpse();
+#liana_test <- liana_test %>% liana_aggregate();
+#dplyr::glimpse(liana_test);
+#png("liana_test.dot.png", h=2000, w=3500, res=200);
+#liana_test %>% liana_dotplot(source_groups=c("Neutrophil"), target_groups=c("GlandularEpithelial","LuminalEpithelial","FibroblastF2","FibroblastF3"), ntop=20);
+#dev.off();
+#png("liana_test.heatmap.png", h=2000, w=2200, res=200);  "filter interactions by aggregate_rank, which can itself be treated as a p-value of for the robustly, highly ranked interactions"
+#liana_trunc <- liana_test %>% filter(aggregate_rank <= 0.01);
+#heat_freq(liana_trunc);
+#dev.off();
+#png("liana_test.chord.png", h=1500, w=1500, res=100);
+#chord_freq(liana_trunc, source_groups=c("Neutrophil","GlandularEpithelial","LuminalEpithelial","FibroblastF2","FibroblastF3"),
+#                        target_groups=c("Neutrophil","GlandularEpithelial","LuminalEpithelial","FibroblastF2","FibroblastF3"));
+#dev.off()
+
+
+### Run for SrfKO and for Ctrl cells separately.
+CellsUseSrfKO <- subset(CellsUse, subset = genotype == "SrfKO");
+unique(Idents(CellsUseSrfKO));  # make sure cell types are current Idents
+liana_SrfKO <- liana_wrap(CellsUseSrfKO, resource="MouseConsensus");
+liana_SrfKO <- liana_SrfKO %>% liana_aggregate();
+CellsUseCtrl <- subset(CellsUse, subset = genotype == "Ctrl");
+unique(Idents(CellsUseCtrl));  # make sure cell types are current Idents
+liana_Ctrl <- liana_wrap(CellsUseCtrl, resource="MouseConsensus");
+liana_Ctrl <- liana_Ctrl %>% liana_aggregate();
+#save.image("Working-liana-07feb2025.RData");  ## dev
+
+
+### Make example images; limit to cell types with at least 100 cells in both genotypes for dot and chord plots.
+ctypeList <- c("Endothelial","GlandularEpithelial","LuminalEpithelial","Perivascular","SmoothMuscle",
+               "FibroblastF2","FibroblastF3","ProliferatingFibroblastSG2","ProliferatingFibroblastM",
+               "cDC2_mregDC","Macrophage","ProliferatingNK");
+
+### Make dot plot for top 20 hits. It will do multiple 'source' in one view, but it quickly becomes too much for one image so here I'm cycling
+### through each cell type as 'source' for individual plots.
+for (i in 1:length(ctypeList)) {
+  s <- ctypeList[i];
+  t <- setdiff(ctypeList,s);
+  pngfile <- paste("liana_outputs/liana_dotplot_top20.source-", s, ".SrfKO.example_10feb2025.png", sep="");
+  png(pngfile, h=2000, w=2500, res=200);
+  p <- liana_SrfKO %>% liana_dotplot(source_groups=s, target_groups=t, ntop=20)+
+                       theme(axis.text.x=element_text(size=14,angle=90,hjust=1), axis.text.y=element_text(size=14));
+  print(p);
+  dev.off();
+  pngfile <- paste("liana_outputs/liana_dotplot_top20.source-", s, ".Ctrl.example_10feb2025.png", sep="");
+  png(pngfile, h=2000, w=2500, res=200);
+  p <- liana_Ctrl %>% liana_dotplot(source_groups=s, target_groups=t, ntop=20)+
+                       theme(axis.text.x=element_text(size=14,angle=90,hjust=1), axis.text.y=element_text(size=14));
+  print(p);
+  dev.off();
+}
+
+### Make heatmap views.
+png("liana_outputs/liana_heatmap.SrfKO.example_10feb2025.png", h=2000, w=2200, res=200);
+liana_SrfKO_trunc <- liana_SrfKO %>% filter(aggregate_rank <= 0.01);
+heat_freq(liana_SrfKO_trunc);
+dev.off();
+png("liana_outputs/liana_heatmap.Ctrl.example_10feb2025.png", h=2000, w=2200, res=200);
+liana_Ctrl_trunc <- liana_Ctrl %>% filter(aggregate_rank <= 0.01);
+heat_freq(liana_Ctrl_trunc);
+dev.off();
+
+### Make chord plots. Use same filtered set from the heatmap views.
+png("liana_outputs/liana_chord.SrfKO.12types.example_10feb2025.png", h=2000, w=2200, res=200);
+chord_freq(liana_SrfKO_trunc, source_groups=ctypeList, target_groups=ctypeList);
+dev.off()
+png("liana_outputs/liana_chord.Ctrl.12types.example_10feb2025.png", h=2000, w=2200, res=200);
+chord_freq(liana_Ctrl_trunc, source_groups=ctypeList, target_groups=ctypeList);
+dev.off()
+### Using 12 cell types makes the view overwhelming, try with limiting to just as few.
+ctypeList4 <- c("Endothelial","Macrophage","Perivascular","FibroblastF3");
+png("liana_outputs/liana_chord.SrfKO.4types.example_10feb2025.png", h=2000, w=2200, res=200);
+chord_freq(liana_SrfKO_trunc, source_groups=ctypeList4, target_groups=ctypeList4);
+dev.off()
+png("liana_outputs/liana_chord.Ctrl.4types.example_10feb2025.png", h=2000, w=2200, res=200);
+chord_freq(liana_Ctrl_trunc, source_groups=ctypeList4, target_groups=ctypeList4);
+dev.off()
+
+### Extract all results and output as a table/matrix.
+txtfile <- "liana_outputs/liana_table.SrfKO.all.txt";
+write.table(file=txtfile, x=as.data.frame(liana_SrfKO), quote=F, append=F, col.names=NA, sep="\t");
+txtfile <- "liana_outputs/liana_table.Ctrl.all.txt";       
+write.table(file=txtfile, x=as.data.frame(liana_Ctrl),	quote=F, append=F, col.names=NA, sep="\t");
+
+
+### Clean up and save image.
+rm(i,p,t,s,pngfile,liana_test,liana_trunc,liana_SrfKO_trunc,liana_Ctrl_trunc,ctypeList,ctypeList4,txtfile);
+save.image("save_rdata/RM-adult_SrfKO-liana.10feb2025.RData");

@@ -1,0 +1,84 @@
+# R432
+
+### Extract final cell list (passing 'bad filters' and non-doublets). Add metadata. Normalize RNA and save object.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+#library(dplyr);
+#library(viridis);
+
+basedir <- "CellRanger";
+foldernames <- c("Ctrl1","Ctrl2","SrfKO1","SrfKO2");
+samplenames <- foldernames;
+for(i in 1:length(foldernames)){
+  read.data <- Read10X(paste(basedir,"/",foldernames[i],"/outs/filtered_feature_bc_matrix/", sep=""));
+  colnames(read.data)<-paste(samplenames[i],colnames(read.data),sep='___');
+  tmpCells <- CreateSeuratObject(read.data,project=samplenames[i],min.features = 1,min.cells = 1);
+  print(samplenames[i]);
+  print(tmpCells);
+  if (i == 1) { Cells <- tmpCells; }
+  else { Cells <- merge(Cells, y=tmpCells); Cells[["RNA"]] <- JoinLayers(Cells[["RNA"]]); }
+  rm(tmpCells);
+  rm(read.data);
+}
+Cells$Sample <- Idents(Cells);
+table(Cells$Sample);
+# Ctrl1  Ctrl2 SrfKO1 SrfKO2 
+# 12579  10948  10527   9986 
+
+### Filter cell lists. Add metadata.
+cellMetaFile <- "initial_QC/cell_ids-filtered.WithMetadata.txt";
+cellMeta <- read.delim(cellMetaFile, header=FALSE, row.names=1);
+colnames(cellMeta) <- c("genotype","batch");
+singletCellList <- rownames(cellMeta);
+CellsUse <- subset(Cells, cells=singletCellList);
+table(CellsUse$Sample);
+# Ctrl1  Ctrl2 SrfKO1 SrfKO2 
+#  9670   7931   8057   7842 
+CellsUse <- AddMetaData(object=CellsUse, metadata=cellMeta);
+table(CellsUse$genotype);
+#  Ctrl SrfKO 
+# 17601 15899 
+table(CellsUse$batch);
+#     1     2 
+# 17727 15773 
+
+
+### Fish out gene names for mito, ribosomal protein, & hemoglobin genes.
+### Calculate the % of counts that are assigned to mito, ribosomal protein, & hemoglobin genes.
+mt_genes<-union(grep("^mt",rownames(CellsUse),value = T),grep("^MT-",rownames(CellsUse),value = T));
+rp_genes<-union(union(grep("^Rpl",rownames(CellsUse),value = T),grep("^Rps",rownames(CellsUse),value = T)),union(grep("^RPL",rownames(CellsUse),value = T),grep("^RPS",rownames(CellsUse),value = T)));
+hg_genes<-union(grep("^Hb.-",rownames(CellsUse),value = T),grep("^HB",rownames(CellsUse),value = T));
+CellsUse$percent.mt <- 100*Matrix::colSums(GetAssayData(CellsUse, assay="RNA", layer="counts")[mt_genes,])/Matrix::colSums(GetAssayData(CellsUse, assay="RNA", layer="counts"));
+CellsUse$percent.rp <- 100*Matrix::colSums(GetAssayData(CellsUse, assay="RNA", layer="counts")[rp_genes,])/Matrix::colSums(GetAssayData(CellsUse, assay="RNA", layer="counts"));
+CellsUse$percent.hg <- 100*Matrix::colSums(GetAssayData(CellsUse, assay="RNA", layer="counts")[hg_genes,])/Matrix::colSums(GetAssayData(CellsUse, assay="RNA", layer="counts"));
+
+### QC plot: View distribution of counts-per-cell and detected-genes-per-cell.
+png("initial_QC/Vln-Count_and_Feature.filtered.png", h=400, w=800, res=100);
+VlnPlot(CellsUse, c("nCount_RNA", "nFeature_RNA"), group.by='Sample', pt.size = 0, log=T, layer="counts");
+dev.off();
+
+### QC plot: View distribution of % of counts assigned to mito, ribosomal, & hemoglobin genes;
+png("initial_QC/Vln-mito_ribo_hg.filtered.png", h=400, w=1200, res=100);
+VlnPlot(CellsUse, c("percent.mt","percent.rp","percent.hg"), group.by='Sample', pt.size = 0, layer="counts");
+dev.off();
+
+
+rm(Cells,cellMetaFile,cellMeta,singletCellList,basedir,foldernames,samplenames,i);
+
+
+### Normalize.  Regress out effects of cell cycle differences and mito content.
+DefaultAssay(CellsUse) <- "RNA";
+mm.s.genes <- c("Msh2","Mcm4","Exo1","Gmnn","Cenpu","Chaf1b","Rrm2","Mrpl36","Slbp","Gins2","Hells","Cdc6","Rad51ap1","Uhrf1","Cdc45","Ubr7","Fen1","Ung","Mcm6","Dscc1","Usp1","Wdr76",
+                "Dtl","Prim1","Tipin","Mcm5","Casp8ap2","Blm","Cdca7","Clspn","Pola1","Nasp","Rad51","Mcm7","E2f8","Ccne2","Rfc2","Tyms","Rrm1","Pcna","Polr1b");
+mm.g2m.genes <- c("Ctcf","Dlgap5","Smc4","Cdc25c","Gtse1","Kif20b","Ckap2","Cks2","Ncapd2","Tpx2","Ttk","Cdca2","Top2a","Hmgb2","Lbr","Anp32e","Cks1brt","Cdca3","G2e3","Tacc3","Psrc1",
+                  "Kif2c","Nuf2","Cenpf","Cdc20","Ckap5","Kif11","Kif23","Hmmr","Anln","Cdca8","Cks1b","Nek2","Ect2","Cenpe","Hjurp","Ndc80","Rangap1","Birc5","Aurkb","Bub1","Ckap2l",
+                  "Ube2c","Jpt1","Ccnb2","Tubb4b","Cenpa","Aurka","Pimreg","Mki67","Nusap1");
+CellsUse <- NormalizeData(CellsUse);
+CellsUse <- CellCycleScoring(CellsUse, s.features=mm.s.genes, g2m.features=mm.g2m.genes, set.ident=TRUE);
+CellsUse$CC.Difference <- CellsUse$S.Score - CellsUse$G2M.Score;
+save.image("tmp_18jan2025.RData");
+CellsUse <- ScaleData(CellsUse, vars.to.regress=c("CC.Difference","percent.mt"), features=rownames(CellsUse));
+
+save.image(file="save_rdata/RM-allCellsFilteredNormalized.18jan2025.RData");
+

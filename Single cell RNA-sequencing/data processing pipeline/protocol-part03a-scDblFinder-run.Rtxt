@@ -1,0 +1,20 @@
+# R432
+
+library(Seurat);         # v5.0.1
+library(scDblFinder);    # v1.16.0
+library(DropletUtils);   # v1.22.0
+library(SingleCellExperiment);  # v1.24.0
+library(BiocParallel);   # v1.36.0
+
+load("save_rdata/RM-QC1-sce.18jan2025.RData");
+
+sceDF <- scDblFinder(sce, samples="Sample", BPPARAM=MulticoreParam(4));
+table(sceDF$scDblFinder.class);
+# singlet doublet 
+#   33500    3521 
+
+forOutput <- data.frame(sample=sceDF$Sample, barcode=colnames(sceDF), scDblFinderClass=sceDF$scDblFinder.class, scDblFinderScore=sceDF$scDblFinder.score);
+
+if (!dir.exists("doublets_scDblFinder")){ dir.create("doublets_scDblFinder") }
+write.table(file="doublets_scDblFinder/scDblFinder_output.txt", x=forOutput, quote=F, append=F, row.names=F, sep="\t");
+

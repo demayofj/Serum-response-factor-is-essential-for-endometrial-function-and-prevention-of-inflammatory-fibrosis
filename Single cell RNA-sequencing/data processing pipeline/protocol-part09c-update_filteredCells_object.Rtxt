@@ -1,0 +1,117 @@
+# R432
+
+### Add assigned broad & subtypes of cells.
+### Pull markers for broad cell types. (Markers for subtypes were pulled in the separate objects.)
+### Clean up object.
+
+library(Seurat);         # v5.0.1
+library(ggplot2);        # v3.4.4
+library(dplyr);
+library(viridis);
+
+load("save_rdata/RM-CellsUse-IntegratedBySample.18jan2025.RData");
+
+## Cell type annotations.
+cellMetaFile <- "assigned_cell_types.04feb2025.txt";
+cellMeta <- read.delim(cellMetaFile, header=FALSE, row.names=1);
+colnames(cellMeta) <- c("broad_cluster","CellTypeBroad","CellSubtype","CellType");  # CellType = subtype if assigned, otherwise it is broad type
+CellsUse <- AddMetaData(object=CellsUse, metadata=cellMeta);
+CellsUse$RNA_snn_res.0.4 <- NULL;
+CellsUse$seurat_clusters <- NULL;
+
+## A few quick sanity checks.
+table(CellsUse$CellTypeBroad,CellsUse$genotype);
+#                        Ctrl SrfKO
+#  Endothelial           2118  1492
+#  Epithelial            1080  2770
+#  Fibroblast           11243  6856
+#  Immune                1188  3467
+#  LymphaticEndothelial    21    31
+#  Mesothelial             67    60
+#  Perivascular          1001   735
+#  SmoothMuscle           883   488
+png("broad_clusters/UMAP.AssignedAnnotation-CellType-04feb2025.png", h=1000, w=1900, res=200);
+DimPlot(CellsUse, group.by="CellType", pt.size=0.2, reduction='umap', shuffle=TRUE);
+dev.off();
+png("broad_clusters/UMAP.AssignedAnnotation-BroadType-04feb2025.png", h=1000, w=1350, res=200);
+DimPlot(CellsUse, group.by="CellTypeBroad", pt.size=0.2, reduction='umap', shuffle=TRUE);
+dev.off();
+
+## Pull markers. Note that this Top5 filter is based on log2fc, which doesn't always collect the most useful markers.
+Idents(CellsUse) <- "CellTypeBroad";
+txtfile1 <- "broad_clusters/Marks-AssignedBroadType-04feb2025.all.txt";
+txtfile2 <- "broad_clusters/Marks-AssignedBroadType-04feb2025.adjp_0.01.txt";
+txtfile3 <- "broad_clusters/Marks-AssignedBroadType-04feb2025.Top5-seurat_filter.txt";
+marksTmp <- FindAllMarkers(CellsUse, assay="RNA", only.pos=FALSE);  write.table(file=txtfile1, x=as.matrix(marksTmp), quote=F, append=F, col.names=NA, sep="\t");
+marksTmpF <- subset(marksTmp, p_val_adj<0.01);  write.table(file=txtfile2, x=as.matrix(marksTmpF), quote=F, append=F, col.names=NA, sep="\t");
+marksTmpTop5 <- marksTmpF %>% group_by(cluster) %>% top_n(n=5, wt=avg_log2FC);  write.table(file=txtfile3, x=as.matrix(marksTmpTop5), quote=F, append=F, col.names=NA, sep="\t");
+
+## Get DEGs (SrfKO vs Ctrl). Repeat using all cells or downsampling to match group sizes.
+if (!dir.exists("DEG_outputs")) { dir.create("DEG_outputs") }
+listBroadTypes <- unique(Idents(CellsUse));
+for (i in 1:length(listBroadTypes)) {
+  CC <- subset(CellsUse, subset = CellTypeBroad == listBroadTypes[i]);
+  z <- rownames(table(CC$genotype));
+  degfile1 <- paste("DEG_outputs/SrfKO-vs-Ctrl.BroadCellTypes.", listBroadTypes[i], ".keep_all_cells.txt", sep="");
+  degfile2 <- paste("DEG_outputs/SrfKO-vs-Ctrl.BroadCellTypes.", listBroadTypes[i], ".downsample_cells.txt", sep="");
+  if ("Ctrl" %in% z == TRUE & "SrfKO" %in% z == TRUE) {  # only test if there are both Ctrl and SrfKO cells in this subset
+    if (!file.exists(degfile1)) {
+      deg <- FindMarkers(CC, ident.1="SrfKO", ident.2="Ctrl", group.by="genotype", verbose=TRUE, assay="RNA", only.pos=FALSE, logfc.threshold=0);  # no minimum log2fc; keep 10% cell cutoff
+      write.table(deg, file=degfile1, sep="\t", quote=F, row.names=TRUE, col.names=NA);
+    }
+    if (!file.exists(degfile2)) {
+      ct1 <- length(colnames(subset(CC, subset = genotype == "SrfKO")));
+      ct2 <- length(colnames(subset(CC, subset = genotype == "Ctrl")));
+      N <- min(ct1,ct2);
+      deg <- FindMarkers(CC, ident.1="SrfKO", ident.2="Ctrl", group.by="genotype", verbose=TRUE, assay="RNA", only.pos=FALSE, logfc.threshold=0, max.cells.per.ident=N);  # no minimum log2fc; keep 10% cell cutoff
+      write.table(deg, file=degfile2, sep="\t", quote=F, row.names=TRUE, col.names=NA);
+    }
+  }
+  rm(CC,z,N,ct1,ct2,degfile1,degfile2,deg);
+}
+
+listSubtypes <- c("FibroblastF2","FibroblastF3","FibroblastUnk","ProliferatingFibroblastM","ProliferatingFibroblastSG2","GlandularEpithelial","LuminalEpithelial");
+for (i in 1:length(listSubtypes)) {
+  CC <- subset(CellsUse, subset = CellSubtype == listSubtypes[i]);
+  z <- rownames(table(CC$genotype));
+  degfile1 <- paste("DEG_outputs/SrfKO-vs-Ctrl.CellSubtypes.", listSubtypes[i], ".keep_all_cells.txt", sep="");
+  degfile2 <- paste("DEG_outputs/SrfKO-vs-Ctrl.CellSubtypes.", listSubtypes[i], ".downsample_cells.txt", sep="");
+  if ("Ctrl" %in% z == TRUE & "SrfKO" %in% z == TRUE) {  # only test if there are both Ctrl and SrfKO cells in this subset
+    if (!file.exists(degfile1)) {
+      deg <- FindMarkers(CC, ident.1="SrfKO", ident.2="Ctrl", group.by="genotype", verbose=TRUE, assay="RNA", only.pos=FALSE, logfc.threshold=0);  # no minimum log2fc; keep 10% cell cutoff
+      write.table(deg, file=degfile1, sep="\t", quote=F, row.names=TRUE, col.names=NA);
+    }
+    if (!file.exists(degfile2)) {
+      ct1 <- length(colnames(subset(CC, subset = genotype == "SrfKO")));
+      ct2 <- length(colnames(subset(CC, subset = genotype == "Ctrl")));
+      N <- min(ct1,ct2);
+      deg <- FindMarkers(CC, ident.1="SrfKO", ident.2="Ctrl", group.by="genotype", verbose=TRUE, assay="RNA", only.pos=FALSE, logfc.threshold=0, max.cells.per.ident=N);  # no minimum log2fc; keep 10% cell cutoff
+      write.table(deg, file=degfile2, sep="\t", quote=F, row.names=TRUE, col.names=NA);
+    }
+  }
+  rm(CC,z,N,ct1,ct2,degfile1,degfile2,deg);
+}
+
+Idents(CellsUse) <- "CellSubtype";
+CC <- subset(CellsUse, idents=c("GlandularEpithelial","LuminalEpithelial"));  ## intermediate leve of epithelial assignments -- no low qual or proliferating
+degfile1 <- paste("DEG_outputs/SrfKO-vs-Ctrl.CellLevelOther.", "GlanLumEpi", ".keep_all_cells.txt", sep="");
+degfile2 <- paste("DEG_outputs/SrfKO-vs-Ctrl.CellLevelOther.", "GlanLumEpi", ".downsample_cells.txt", sep="");
+deg <- FindMarkers(CC, ident.1="SrfKO", ident.2="Ctrl", group.by="genotype", verbose=TRUE, assay="RNA", only.pos=FALSE, logfc.threshold=0);  # no minimum log2fc; keep 10% cell cutoff
+write.table(deg, file=degfile1, sep="\t", quote=F, row.names=TRUE, col.names=NA);
+ct1 <- length(colnames(subset(CC, subset = genotype == "SrfKO")));
+ct2 <- length(colnames(subset(CC, subset = genotype == "Ctrl")));
+N <- min(ct1,ct2);
+deg <- FindMarkers(CC, ident.1="SrfKO", ident.2="Ctrl", group.by="genotype", verbose=TRUE, assay="RNA", only.pos=FALSE, logfc.threshold=0, max.cells.per.ident=N);  # no minimum log2fc; keep 10% cell cutoff
+write.table(deg, file=degfile2, sep="\t", quote=F, row.names=TRUE, col.names=NA);
+rm(CC,N,ct1,ct2,degfile1,degfile2,deg);
+
+
+rm(txtfile1,txtfile2,txtfile3,marksTmp,marksTmpF,marksTmpTop5);
+rm(cellMeta,cellMetaFile);
+rm(hg_genes,rp_genes,mt_genes,mm.g2m.genes,mm.s.genes);
+rm(i,listBroadTypes,listSubtypes);
+Idents(CellsUse) <- "CellType";
+
+save.image("save_rdata/RM-CellsUse-IntegratedBySample-Annotated.04feb2025.RData");
+saveRDS(CellsUse, "save_rds/RM-adult_SrfKO-FilteredIntegratedAnnotated.04feb2025.rds");
+

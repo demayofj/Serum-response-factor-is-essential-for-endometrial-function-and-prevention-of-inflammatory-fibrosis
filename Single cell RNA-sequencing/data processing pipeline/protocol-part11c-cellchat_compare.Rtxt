@@ -1,0 +1,264 @@
+# R432
+
+## Combine CellChat objects for Ctrl and SrfKO (see part11b), run through comparison vignette.
+
+# https://github.com/jinworks/CellChat/blob/main/tutorial/Comparison_analysis_of_multiple_datasets.html
+# https://github.com/jinworks/CellChat/blob/main/tutorial/Comparison_analysis_of_multiple_datasets_with_different_cellular_compositions.html
+
+if (!dir.exists("cellchat_outputs")) { dir.create("cellchat_outputs") }
+
+library(CellChat);
+library(patchwork);
+options(stringsAsFactors=FALSE);
+library(Seurat);
+library(NMF);
+library(ggalluvial);
+library(ComplexHeatmap);
+library(wordcloud);
+
+
+## Prep: Load and merge.
+load("save_rdata/RM-CellChatDB-Ctrl.19feb2025.RData");
+load("save_rdata/RM-CellChatDB-SrfKO.19feb2025.RData");
+levels(CCobjCtrl@idents);
+levels(CCobjSrfKO@idents);
+## these are the same, so don't need to 'liftCellChat' ... see "with different cellular compositions" instructions
+object.list <- list(Ctrl=CCobjCtrl, SrfKO=CCobjSrfKO);
+CCobjMerged <- mergeCellChat(object.list, add.names=names(object.list));
+
+
+## Part I: Predict general principles of cell-cell communication.
+gg1 <- compareInteractions(CCobjMerged, show.legend=F, group=c(1,2));
+gg2 <- compareInteractions(CCobjMerged, show.legend=F, group=c(1,2), measure="weight");
+png("cellchat_outputs/merged.compare_interactions_summary.png", h=600, w=1000, res=200);
+gg1+gg2;
+dev.off();
+## colors in diffInteraction plots are red/increased and blue/decreased ... should be SrfKO-vs-Ctrl according to docs ???
+png("cellchat_outputs/merged.diff_interaction_count-all.circle-view.png", h=2000, w=2000, res=200);
+netVisual_diffInteraction(CCobjMerged, weight.scale=T);
+dev.off();
+png("cellchat_outputs/merged.diff_interaction_weight-all.circle-view.png", h=2000, w=2000, res=200);
+netVisual_diffInteraction(CCobjMerged, weight.scale=T, measure="weight");
+dev.off();
+gg1 <- netVisual_heatmap(CCobjMerged);
+gg2 <- netVisual_heatmap(CCobjMerged, measure="weight");
+png("cellchat_outputs/merged.diff_interaction-all.heatmap-view.png", h=1000, w=2000, res=200);
+gg1+gg2;
+dev.off();
+## interaction counts/weights controlling node size and edge weights across datasets -- these don't seem very informative, the differential ones seemed better for comparison
+weight.max <- getMaxWeight(object.list, attribute = c("idents","count"));
+png("cellchat_outputs/merged.number_of_interaction-Ctrl-sized.circle-view.png", h=2000, w=2000, res=200);
+netVisual_circle(object.list[[1]]@net$count, weight.scale=T, label.edge=F, edge.weight.max=weight.max[2], edge.width.max=12, title.name=paste0("Number of interactions - ", names(object.list)[1]));
+dev.off();
+png("cellchat_outputs/merged.number_of_interaction-SrfKO-sized.circle-view.png", h=2000, w=2000, res=200);
+netVisual_circle(object.list[[2]]@net$count, weight.scale=T, label.edge=F, edge.weight.max=weight.max[2], edge.width.max=12, title.name=paste0("Number of interactions - ", names(object.list)[2]));
+dev.off();
+png("cellchat_outputs/merged.weight_of_interaction-Ctrl-sized.circle-view.png", h=2000, w=2000, res=200);
+netVisual_circle(object.list[[1]]@net$weight, weight.scale=T, label.edge=F, edge.weight.max=weight.max[2], edge.width.max=12, title.name=paste0("Interaction weights - ", names(object.list)[1]));
+dev.off();
+png("cellchat_outputs/merged.weight_of_interaction-SrfKO-sized.circle-view.png", h=2000, w=2000, res=200);
+netVisual_circle(object.list[[2]]@net$weight, weight.scale=T, label.edge=F, edge.weight.max=weight.max[2], edge.width.max=12, title.name=paste0("Interaction weights - ", names(object.list)[2]));
+dev.off();
+## compare major sources and targets in 2D space
+num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)});
+weight.MinMax <- c(min(num.link), max(num.link));
+gg <- list();
+for (i in 1:length(object.list)) {
+  gg[[i]] <- netAnalysis_signalingRole_scatter(object.list[[i]], title=names(object.list)[i], weight.MinMax=weight.MinMax);
+}
+png("cellchat_outputs/merged.major_sources_targets.scatter-view.png", h=1000, w=2000, res=200);
+patchwork::wrap_plots(plot=gg);
+dev.off();
+## plot differential signaling scatterplot for user-defined cell type, examples: Perivascular or Imm-Macrophage
+png("cellchat_outputs/merged.diff_signalingChanges-Perivascular.scatter-view.png", h=1000, w=1400, res=200);
+netAnalysis_signalingChanges_scatter(CCobjMerged, idents.use="Perivascular");
+dev.off();
+png("cellchat_outputs/merged.diff_signalingChanges-Macrophage.scatter-view.png", h=1000, w=1400, res=200);
+netAnalysis_signalingChanges_scatter(CCobjMerged, idents.use="Imm-Macrophage");
+dev.off();
+rm(i,gg,gg1,gg2);
+save.image("Working-CellChatDB-19feb2025-merged-x1.RData");
+
+
+## Part II: Identify the conserved and context-specific signaling pathways.
+CCobjMerged <- computeNetSimilarityPairwise(CCobjMerged, type="functional");
+CCobjMerged <- netEmbedding(CCobjMerged, type="functional", umap.method="uwot");
+CCobjMerged <- netClustering(CCobjMerged, type="functional");
+png("cellchat_outputs/merged.comm_patterns_typeFunctional.pairwise.png", h=1600, w=1800, res=200);
+netVisual_embeddingPairwise(CCobjMerged, type="functional", label.size=3.5)
+dev.off();
+png("cellchat_outputs/merged.comm_patterns_typeFunctional.pairwise-zoom.png", h=2000, w=2000, res=200);
+netVisual_embeddingPairwiseZoomIn(CCobjMerged, type="functional", nCol=2);
+dev.off();
+CCobjMerged <- computeNetSimilarityPairwise(CCobjMerged, type="structural");
+CCobjMerged <- netEmbedding(CCobjMerged, type="structural", umap.method="uwot");
+CCobjMerged <- netClustering(CCobjMerged, type="structural");
+png("cellchat_outputs/merged.comm_patterns_typeStructural.pairwise.png", h=1600, w=1800, res=200);
+netVisual_embeddingPairwise(CCobjMerged, type="structural", label.size=3.5)
+dev.off();
+png("cellchat_outputs/merged.comm_patterns_typeStructural.pairwise-zoom.png", h=2000, w=3000, res=200);
+netVisual_embeddingPairwiseZoomIn(CCobjMerged, type="structural", nCol=3);
+dev.off();
+save.image("Working-CellChatDB-19feb2025-merged-x2.RData");
+
+png("cellchat_outputs/merged.rank_similarity_typeFunctional.png", h=3000, w=1000, res=200);
+rankSimilarity(CCobjMerged, type="functional");  # only evaluates signaling pathways identified in both datasets
+dev.off();
+png("cellchat_outputs/merged.rank_similarity_typeStructural.png", h=3000, w=1000, res=200);
+rankSimilarity(CCobjMerged, type="structural");  # only evaluates signaling pathways identified in both datasets
+dev.off();
+
+gg1 <- rankNet(CCobjMerged, mode="comparison", stacked=T, do.stat=TRUE);
+gg2 <- rankNet(CCobjMerged, mode="comparison", stacked=F, do.stat=TRUE);
+png("cellchat_outputs/merged.infoFlow.png", h=3000, w=2000, res=200);
+gg1+gg2;
+dev.off();
+
+i=1;
+pathway.union <- union(object.list[[i]]@netP$pathways, object.list[[i+1]]@netP$pathways);
+png("cellchat_outputs/merged.signalingRole-outgoing.heatmap-view.png", h=2000, w=2000, res=200);
+ht1 <- netAnalysis_signalingRole_heatmap(object.list[[i]], pattern="outgoing", signaling=pathway.union, title=names(object.list)[i], width=8, height=20);
+ht2 <- netAnalysis_signalingRole_heatmap(object.list[[i+1]], pattern="outgoing", signaling=pathway.union, title=names(object.list)[i+1], width=8, height=20);
+draw(ht1+ht2, ht_gap=unit(0.5, "cm"));
+dev.off();
+png("cellchat_outputs/merged.signalingRole-incoming.heatmap-view.png", h=2000, w=2000, res=200);
+ht3 <- netAnalysis_signalingRole_heatmap(object.list[[i]], pattern="incoming", signaling=pathway.union, title=names(object.list)[i], width=8, height=20, color.heatmap="GnBu");
+ht4 <- netAnalysis_signalingRole_heatmap(object.list[[i+1]], pattern="incoming", signaling=pathway.union, title=names(object.list)[i+1], width=8, height=20, color.heatmap="GnBu");
+draw(ht3+ht4, ht_gap=unit(0.5, "cm"));
+dev.off();
+png("cellchat_outputs/merged.signalingRole-all.heatmap-view.png", h=2000, w=2000, res=200);
+ht5 <- netAnalysis_signalingRole_heatmap(object.list[[i]], pattern="all", signaling=pathway.union, title=names(object.list)[i], width=8, height=20, color.heatmap="OrRd");
+ht6 <- netAnalysis_signalingRole_heatmap(object.list[[i+1]], pattern="all", signaling=pathway.union, title=names(object.list)[i+1], width=8, height=20, color.heatmap="OrRd");
+draw(ht5+ht6, ht_gap=unit(0.5, "cm"));
+dev.off();
+
+
+## Part III: Identify the upgulated and down-regulated signaling ligand-receptor pairs.
+## NOTE FOR RYAN -- Most plots in part III require specifying the source & target cell types ... I'm only making example views here, you'll want to modify the sources.use and targets.use parameters according to your interests.
+
+## identify the up- and down-regulated signaling ligand-receptor pairs based on communication probabilties
+alphaOrderCellTypes <- sort(unique(CCobjCtrl@idents));
+png("cellchat_outputs/merged.commProbabilities-example.bubble-view.png", h=4000, w=1600, res=200);
+netVisual_bubble(CCobjMerged, sources.use=7, targets.use=c(17:22), comparison=c(1,2), angle.x=45);
+dev.off();
+png("cellchat_outputs/merged.commProbabilities-updown-example.bubble-view.png", h=4000, w=3200, res=200);  # access LR pairs in plot via gg1$data
+gg1 <- netVisual_bubble(CCobjMerged, sources.use=7, targets.use=c(17:22), comparison=c(1,2), max.dataset=2, title.name="Increased signaling in SrfKO", angle.x=45, remove.isolate=T);
+gg2 <- netVisual_bubble(CCobjMerged, sources.use=7, targets.use=c(17:22), comparison=c(1,2), max.dataset=1, title.name="Decreased signaling in SrfKO", angle.x=45, remove.isolate=T);
+gg1+gg2;
+dev.off();
+
+## alternative appoach: identify the up- and down-regulated signaling ligand-receptor pairs based on the differential gene expression analysis
+CCobjMerged <- identifyOverExpressedGenes(CCobjMerged, group.dataset="datasets", pos.dataset="SrfKO", features.name="SrfKO", only.pos=FALSE, thresh.pc=0.1, thresh.fc=0.1, thresh.p=1);
+net <- netMappingDEG(CCobjMerged, features.name="SrfKO");
+net.up <- subsetCommunication(CCobjMerged, net=net, datasets="SrfKO", ligand.logFC=0.1, receptor.logFC=NULL);
+net.down <- subsetCommunication(CCobjMerged, net=net, datasets="Ctrl", ligand.logFC=-0.1, receptor.logFC=-0.1);
+gene.up <- extractGeneSubsetFromPair(net.up, CCobjMerged);
+gene.down <- extractGeneSubsetFromPair(net.down, CCobjMerged);
+pairLR.use.up <- net.up[, "interaction_name", drop=F];
+pairLR.use.down <- net.down[, "interaction_name", drop=F];
+png("cellchat_outputs/merged.byGeneExpr-updown-example.bubble-view.png", h=4000, w=3200, res=200);
+gg1 <- netVisual_bubble(CCobjMerged, pairLR.use=pairLR.use.up, sources.use=7, targets.use=c(17:22), comparison=c(1,2), angle.x=90, remove.isolate=T, title.name=paste0("Up-regulated signaling in ", names(object.list)[2]));
+gg2 <- netVisual_bubble(CCobjMerged, pairLR.use=pairLR.use.down, sources.use=7, targets.use=c(17:22), comparison=c(1,2), angle.x=90, remove.isolate=T, title.name=paste0("Down-regulated signaling in ", names(object.list)[2]));
+gg1+gg2;
+dev.off();
+png("cellchat_outputs/merged.byGeneExpr-up-example.chord-view.png", h=2000, w=2000, res=200);
+netVisual_chord_gene(object.list[[2]], sources.use=7, targets.use=c(17:21), slot.name='net', net=net.up, lab.cex=0.8, small.gap=3.5, title.name=paste0("Up-regulated signaling in ", names(object.list)[2]));
+dev.off();
+png("cellchat_outputs/merged.byGeneExpr-down-example.chord-view.png", h=2000, w=2000, res=200);
+netVisual_chord_gene(object.list[[1]], sources.use=7, targets.use=c(17:21), slot.name='net', net=net.down, lab.cex=0.8, small.gap=3.5, title.name=paste0("Down-regulated signaling in ", names(object.list)[2]));
+dev.off();
+png("cellchat_outputs/merged.byGeneExpr-down.wordcloud-view.png", h=800, w=800, res=100);
+computeEnrichmentScore(net.down, species='mouse');
+dev.off();
+png("cellchat_outputs/merged.byGeneExpr-up.wordcloud-view.png", h=800, w=800, res=100);
+computeEnrichmentScore(net.up, species='mouse');
+dev.off();
+rm(gg1,gg2,ht1,ht2,ht3,ht4,ht5,ht6);
+save.image("Working-CellChatDB-20feb2025-merged-x3.RData");
+
+
+## Part IV: Visually compare cell-cell communication using Hierarchy plot, Circle plot or Chord diagram.
+## NOTE FOR RYAN -- Most plots in part IV require specifying pathways and sometimes also the source & target cell types; you'll want to modify the signaling/sources.use/targets.use parameters according to your interests.
+
+pathways.show <- c("CXCL"); 
+weight.max <- getMaxWeight(object.list, slot.name=c("netP"), attribute=pathways.show);
+png("tmp1.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_aggregate(object.list[[1]], signaling=pathways.show, layout="circle", edge.weight.max=weight.max[1], edge.width.max=10, signaling.name=paste(pathways.show, names(object.list)[1]));
+dev.off();
+png("tmp2.png",	h=2000,	w=2000,	res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_aggregate(object.list[[2]], signaling=pathways.show, layout="circle", edge.weight.max=weight.max[1], edge.width.max=10, signaling.name=paste(pathways.show, names(object.list)[2]));
+dev.off();
+system("convert tmp1.png tmp2.png +append cellchat_outputs/merged.example_network_by_genotype.circle-view.png");
+system("rm tmp1.png tmp2.png");
+
+png("cellchat_outputs/merged.example_network_by_genotype.heatmap-view.png", h=1000, w=2000, res=200);
+ht1 <- netVisual_heatmap(object.list[[1]], signaling=pathways.show, color.heatmap="Reds", title.name=paste(pathways.show, "signaling ", names(object.list)[1]));
+ht2 <- netVisual_heatmap(object.list[[2]], signaling=pathways.show, color.heatmap="Reds", title.name=paste(pathways.show, "signaling ", names(object.list)[2]));
+draw(ht1+ht2, ht_gap=unit(0.5, "cm"));
+dev.off();
+
+png("tmp1.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_aggregate(object.list[[1]], signaling=pathways.show, layout="chord", signaling.name=paste(pathways.show, names(object.list)[1]));
+dev.off();
+png("tmp2.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_aggregate(object.list[[2]], signaling=pathways.show, layout="chord", signaling.name=paste(pathways.show, names(object.list)[2]));
+dev.off();
+system("convert tmp1.png tmp2.png +append cellchat_outputs/merged.example_network_by_genotype.chord-view.png");
+system("rm tmp1.png tmp2.png");
+
+png("tmp1.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_chord_gene(object.list[[1]], sources.use=17, targets.use=c(3,4,6:10), slot.name="net", lab.cex=0.5, title.name=paste0("Signaling interactions from ", alphaOrderCellTypes[17], " - ", names(object.list)[1]));
+dev.off();
+png("tmp2.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_chord_gene(object.list[[2]], sources.use=17, targets.use=c(3,4,6:10), slot.name="net", lab.cex=0.5, title.name=paste0("Signaling interactions from ", alphaOrderCellTypes[17], " - ", names(object.list)[2]));
+dev.off();
+system("convert tmp1.png tmp2.png +append cellchat_outputs/merged.example_outgoing_by_genotype.chord-view.png");
+system("rm tmp1.png tmp2.png");
+
+png("tmp1.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_chord_gene(object.list[[1]], sources.use=c(7:10), targets.use=17, slot.name="net", lab.cex=0.5, title.name=paste0("Signaling interactions to ", alphaOrderCellTypes[17], " - ", names(object.list)[1]));
+dev.off();
+png("tmp2.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_chord_gene(object.list[[2]], sources.use=c(7:10), targets.use=17, slot.name="net", lab.cex=0.5, title.name=paste0("Signaling interactions to ", alphaOrderCellTypes[17], " - ", names(object.list)[2]));
+dev.off();
+system("convert tmp1.png tmp2.png +append cellchat_outputs/merged.example_incoming_by_genotype.chord-view.png");
+system("rm tmp1.png tmp2.png");
+
+png("tmp1.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_chord_gene(object.list[[1]], sources.use=17, targets.use=c(3,4,6:10), slot.name="netP", lab.cex=0.5, title.name=paste0("Signaling pathways from ", alphaOrderCellTypes[17], " - ", names(object.list)[1]));
+dev.off();
+png("tmp2.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_chord_gene(object.list[[2]], sources.use=17, targets.use=c(3,4,6:10), slot.name="netP", lab.cex=0.5, title.name=paste0("Signaling pathways from ", alphaOrderCellTypes[17], " - ", names(object.list)[2]));
+dev.off();
+system("convert tmp1.png tmp2.png +append cellchat_outputs/merged.example_outgoing_pathways_by_genotype.chord-view.png");
+system("rm tmp1.png tmp2.png");
+
+png("tmp1.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_chord_gene(object.list[[1]], sources.use=c(7:10), targets.use=17, slot.name="netP", lab.cex=0.5, title.name=paste0("Signaling pathways to ", alphaOrderCellTypes[17], " - ", names(object.list)[1]));
+dev.off();
+png("tmp2.png", h=2000, w=2000, res=200);
+par(mfrow=c(1,1), xpd=TRUE);
+netVisual_chord_gene(object.list[[2]], sources.use=c(7:10), targets.use=17, slot.name="netP", lab.cex=0.5, title.name=paste0("Signaling pathways to ", alphaOrderCellTypes[17], " - ", names(object.list)[2]));
+dev.off();
+system("convert tmp1.png tmp2.png +append cellchat_outputs/merged.example_incoming_pathways_by_genotype.chord-view.png");
+system("rm tmp1.png tmp2.png");
+
+
+## Part V: Compare the signaling gene expression distribution between different datasets. --> probably easier/better to do this directly via Seurat functions with the normalized data {so skipping this section}
+
+
+## cleanup and save
+rm(gg1,gg2,i,ht1,ht2,weight.max,pathways.show);
+save.image("save_rdata/RM-CellChatDB-merged.20feb2025.RData");
+
