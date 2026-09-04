@@ -1,0 +1,10 @@
+library(Seurat);
+
+heca <- readRDS("/ddn/gs1/home/grimmsa/RyanMarquardt/HECA/method_MuDataSeurat/endometriumAtlasV2_cells_with_counts.Seurat.rds");
+genelistH <- rownames(heca@assays$RNA);
+write(file="genelist.hecaCells-human.txt", x=genelistH, append=F, sep="\n");
+
+ryan <- readRDS("/ddn/gs1/home/grimmsa/RyanMarquardt/Project_SRF_adult_Jan2025/save_rds/RM-adult_SrfKO-FilteredIntegratedAnnotated.04feb2025.rds");
+genelistM <- rownames(ryan@assays$RNA);
+write(file="genelist.ryan-mouse.txt", x=genelistM, append=F, sep="\n");
+

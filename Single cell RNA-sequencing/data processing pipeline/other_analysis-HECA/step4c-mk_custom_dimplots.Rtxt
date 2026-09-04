@@ -1,0 +1,230 @@
+library(ggplot2);
+library(dplyr);
+
+infile <- "info_for_umap_views.03mar2025.txt";
+data  <- read.delim(infile, header=TRUE);
+set.seed(77); rr <- sample(nrow(data)); ddAll <- data[rr,];  # shuffle rows for better mixing of colors
+x1 <- floor(min(data$umapX));
+x2 <- ceiling(max(data$umapX));
+y1 <- floor(min(data$umapY));
+y2 <- ceiling(max(data$umapY));
+
+ddH <- subset(ddAll, (ddAll$species == "human"));
+### plot human with assigned cell type
+png("UMAP.hecaNH-AssignedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "HECA(NH) -- assigned cell type";
+median_data <- ddH %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddH, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") + 
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.hecaNH-AssignedCellType.NoLabels.png", h=1200, w=1150, res=300);
+mainlab <- "HECA(NH) -- assigned cell type";
+median_data <- ddH %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddH, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity();
+dev.off();
+
+ddM <- subset(ddAll, (ddAll$species == "mouse"));
+ddMWT <- subset(ddM, (ddM$genotype == "Ctrl"));
+ddMKO <- subset(ddM, (ddM$genotype == "SrfKO"));
+### plot mouse with assigned cell type
+png("UMAP.mouse_all-AssignedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl+SrfKO -- assigned cell type";
+median_data <- ddM %>% group_by(mouseCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddM, aes(x=umapX, y=umapY, color=colorMouse)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$mouseCellType, size=2);
+dev.off();
+png("UMAP.mouse_Ctrl-AssignedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl -- assigned cell type";
+median_data <- ddMWT %>% group_by(mouseCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddMWT, aes(x=umapX, y=umapY, color=colorMouse)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$mouseCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-AssignedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO -- assigned cell type";
+median_data <- ddMKO %>% group_by(mouseCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddMKO, aes(x=umapX, y=umapY, color=colorMouse)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$mouseCellType, size=2);
+dev.off();
+### plot mouse with transferred/predicted cell type
+png("UMAP.mouse_all-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl+SrfKO -- transferred cell type";
+median_data <- ddM %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddM, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_Ctrl-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl -- transferred cell type";
+median_data <- ddMWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddMWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO -- transferred cell type";
+median_data <- ddMKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddMKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+
+### for selected mouse cell types, plot cells with color according to transferred/predicted cell type; layer these over background of 'snow' human cells; split by genotype
+ddHH <- ddH; ddHH$colorHuman <- "snow";
+# fibro F2
+ddXWT <- subset(ddMWT, (ddMWT$mouseCellType == "FibroblastF2"));
+ddXKO <- subset(ddMKO, (ddMKO$mouseCellType == "FibroblastF2"));
+ddCWT <- rbind(ddHH,ddXWT);
+ddCKO <- rbind(ddHH,ddXKO);
+png("UMAP.mouse_Ctrl-FibroF2-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl [FibF2] -- trans. type";
+median_data <- ddXWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-FibroF2-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO [FibF2] -- trans. type";
+median_data <- ddXKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+# fibro F3
+ddXWT <- subset(ddMWT, (ddMWT$mouseCellType == "FibroblastF3"));
+ddXKO <- subset(ddMKO, (ddMKO$mouseCellType == "FibroblastF3"));
+ddCWT <- rbind(ddHH,ddXWT);
+ddCKO <- rbind(ddHH,ddXKO);
+png("UMAP.mouse_Ctrl-FibroF3-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl [FibF3] -- trans. type";
+median_data <- ddXWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-FibroF3-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO [FibF3] -- trans. type";
+median_data <- ddXKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+# ProliferatingFibroblastSG2 and ProliferatingFibroblastG2M
+ddXWT <- subset(ddMWT, (ddMWT$mouseCellType == "ProliferatingFibroblastSG2" | ddMWT$mouseCellType == "ProliferatingFibroblastG2M"));
+ddXKO <- subset(ddMKO, (ddMKO$mouseCellType == "ProliferatingFibroblastSG2" | ddMKO$mouseCellType == "ProliferatingFibroblastG2M"));
+ddCWT <- rbind(ddHH,ddXWT);
+ddCKO <- rbind(ddHH,ddXKO);
+png("UMAP.mouse_Ctrl-FibroProlif-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl [FibProlif] -- trans. type";
+median_data <- ddXWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-FibroProlif-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO [FibProlif] -- trans. type";
+median_data <- ddXKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+# GlandularEpithelial
+ddXWT <- subset(ddMWT, (ddMWT$mouseCellType == "GlandularEpithelial"));
+ddXKO <- subset(ddMKO, (ddMKO$mouseCellType == "GlandularEpithelial"));
+ddCWT <- rbind(ddHH,ddXWT);
+ddCKO <- rbind(ddHH,ddXKO);
+png("UMAP.mouse_Ctrl-GlndEpiNoProlif-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl [GlndEpi] -- trans. type";
+median_data <- ddXWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-GlndEpiNoProlif-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO [GlndEpi] -- trans. type";
+median_data <- ddXKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+# GlandularEpithelial and ProliferatingGlandularEpithelial
+ddXWT <- subset(ddMWT, (ddMWT$mouseCellType == "GlandularEpithelial" | ddMWT$mouseCellType == "ProliferatingGlandularEpithelial"));
+ddXKO <- subset(ddMKO, (ddMKO$mouseCellType == "GlandularEpithelial" | ddMKO$mouseCellType == "ProliferatingGlandularEpithelial"));
+ddCWT <- rbind(ddHH,ddXWT);
+ddCKO <- rbind(ddHH,ddXKO);
+png("UMAP.mouse_Ctrl-GlndEpiWithProlif-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl [GlndEpi+Prolif] -- trans. type";
+median_data <- ddXWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-GlndEpiWithProlif-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO [GlndEpi+Prolif] -- trans. type";
+median_data <- ddXKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+# LuminalEpithelial
+ddXWT <- subset(ddMWT, (ddMWT$mouseCellType == "LuminalEpithelial"));
+ddXKO <- subset(ddMKO, (ddMKO$mouseCellType == "LuminalEpithelial"));
+ddCWT <- rbind(ddHH,ddXWT);
+ddCKO <- rbind(ddHH,ddXKO);
+png("UMAP.mouse_Ctrl-LumEpi-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl [LumEpi] -- trans. type";
+median_data <- ddXWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-LumEpi-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO [LumEpi] -- trans. type";
+median_data <- ddXKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+# Perivascular
+ddXWT <- subset(ddMWT, (ddMWT$mouseCellType == "Perivascular"));
+ddXKO <- subset(ddMKO, (ddMKO$mouseCellType == "Perivascular"));
+ddCWT <- rbind(ddHH,ddXWT);
+ddCKO <- rbind(ddHH,ddXKO);
+png("UMAP.mouse_Ctrl-Perivascular-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl [Perivascular] -- trans. type";
+median_data <- ddXWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-Perivascular-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO [Perivascular] -- trans. type";
+median_data <- ddXKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+# SmoothMuscle
+ddXWT <- subset(ddMWT, (ddMWT$mouseCellType == "SmoothMuscle"));
+ddXKO <- subset(ddMKO, (ddMKO$mouseCellType == "SmoothMuscle"));
+ddCWT <- rbind(ddHH,ddXWT);
+ddCKO <- rbind(ddHH,ddXKO);
+png("UMAP.mouse_Ctrl-SmoothMuscle-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult Ctrl [SmoothMuscle] -- trans. type";
+median_data <- ddXWT %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCWT, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+png("UMAP.mouse_SrfKO-SmoothMuscle-PredictedCellType.png", h=1200, w=1150, res=300);
+mainlab <- "Adult SrfKO [SmoothMuscle] -- trans. type";
+median_data <- ddXKO %>% group_by(humanCellType) %>% summarise(median_x = median(umapX), median_y = median(umapY));
+ggplot(ddCKO, aes(x=umapX, y=umapY, color=colorHuman)) + ggtitle(mainlab) + geom_point(size=0.1) + theme_classic() + xlab("UMAP_1") + ylab("UMAP_2") +
+       coord_cartesian(xlim=c(x1,x2),ylim=c(y1,y2)) + scale_colour_identity() +
+       annotate("text", x=median_data$median_x, y=median_data$median_y, label=median_data$humanCellType, size=2);
+dev.off();
+

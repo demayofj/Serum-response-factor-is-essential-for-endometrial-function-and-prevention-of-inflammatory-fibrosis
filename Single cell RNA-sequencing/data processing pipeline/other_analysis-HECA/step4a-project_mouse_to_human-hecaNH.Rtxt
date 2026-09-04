@@ -1,0 +1,110 @@
+library(Seurat);
+library(ggplot2);
+
+objM2H <- readRDS("RM-adult_SrfKO-HumanOrthoGeneNames.28feb2025.rds");
+hecaNH <- readRDS("/ddn/gs1/home/grimmsa/RyanMarquardt/HECA/method_MuDataSeurat/endometriumAtlasV2_cells_with_counts-NonHormoneDonors.Seurat.rds");
+
+orthoHumanGenes <- read.delim("genelist_ortholog_pairs.txt", header=FALSE)$V1;
+
+## update variable features in HECA dataset with hormone-treated donors removed
+hecaNH <- FindVariableFeatures(hecaNH);
+
+## run pca reduction
+hecaNH <- ScaleData(hecaNH);  # by default, only runs on variable features ... that's fine here because RunPCA also only uses variable features by default
+hecaNH <- RunPCA(hecaNH);
+
+## by default, this function uses variable features from the reference that are also in the query data
+anchors.VF2k <- FindTransferAnchors(reference=hecaNH, query=objM2H, dim=1:30, reference.reduction="pca");
+#	Found 11850 anchors
+length(anchors.VF2k@anchor.features);  # 1606
+
+## alternatively define features as all genes with 1:1 orthologs ... looks like this gives the same result, but confirm that it also gives the same predictions below
+anchors.ortho <- FindTransferAnchors(reference=hecaNH, query=objM2H, dim=1:30, reference.reduction="pca", features=orthoHumanGenes);
+#	Found 11850 anchors
+length(anchors.ortho@anchor.features);  # 13476
+
+#save.image("tmpM2H-28feb2025-6pm.RData");
+
+
+## transfer labels from human to mouse; check how well they match up with our annotations
+prediction.VF2k <- TransferData(anchorset=anchors.VF2k, refdata=hecaNH$celltype);
+prediction.ortho <- TransferData(anchorset=anchors.ortho, refdata=hecaNH$celltype);
+colA <- prediction.VF2k[,c(1,38)]; colnames(colA) <- c("predCellType_VF2k","predScore_VF2k");
+colB <- prediction.ortho[,c(1,38)]; colnames(colB) <- c("predCellType_ortho","predScore_ortho");
+meta_df <- cbind(colA,colB);
+nrow(meta_df[meta_df$predCellType_VF2k != meta_df$predCellType_ortho,]);   # 0 ... all cell type transfer predictions are the same regardless of anchors used, which would be consistent with anchors being the same as presumed above
+meta_use <- prediction.VF2k[,c(1,38)];
+objM2H <- AddMetaData(object=objM2H, metadata=meta_use);
+write.table("tranferred_celltype_predictions.hecaNH_to_mouse.txt", x=as.matrix(meta_use), quote=F, append=F, col.names=NA, sep="\t");
+rm(colA,colB,meta_df,meta_use);
+
+table(objM2H$CellType,objM2H$predicted.id);
+objM2H_Ctrl <- subset(objM2H, subset = genotype == "Ctrl");
+write.table(file="celltype_prediction_table.Ctrl.txt", x=as.matrix(table(objM2H_Ctrl$CellType,objM2H_Ctrl$predicted.id)), quote=F, append=F, col.names=NA, sep="\t");
+objM2H_SrfKO <- subset(objM2H, subset = genotype == "SrfKO");
+write.table(file="celltype_prediction_table.SrfKO.txt", x=as.matrix(table(objM2H_SrfKO$CellType,objM2H_SrfKO$predicted.id)), quote=F, append=F, col.names=NA, sep="\t");
+rm(objM2H_Ctrl,objM2H_SrfKO);
+
+Idents(hecaNH) <- "celltype";
+write.table(file="assigned_celltype.hecaNH.txt", x=as.matrix(Idents(hecaNH)), quote=F, append=F, col.names=F, sep="\t");
+
+
+
+## the HECA object does not have all the required UMAP model results stored -- see error below
+#working <- objM2H;
+#working <- IntegrateEmbeddings(anchorset=anchors.VF2k, reference=hecaNH, query=working, new.reduction.name="ref.pca");
+#working <- ProjectUMAP(query=working, query.reduction="ref.pca", reference=hecaNH, reference.reduction="pca", reduction.model="umap");
+## Error: The provided reduction.model does not have a model stored. Please try running umot-learn on the object first
+
+## so, need to make new UMAP for the hecaNH object, then do the projection
+hecaNH <- RunUMAP(hecaNH, dims=1:30, return.model=TRUE);
+objM2H <- IntegrateEmbeddings(anchorset=anchors.VF2k, reference=hecaNH, query=objM2H, new.reduction.name="ref.pca");
+objM2H <- ProjectUMAP(query=objM2H, query.reduction="ref.pca", reference=hecaNH, reference.reduction="pca", reduction.model="umap");
+
+## quick UMAP views for sanity check -- will want better views with colors consistent across the two datasets; will do this in a separate script so I can organize it to my preferences
+png("UMAP-hecaNH.withLegend.png", h=800, w=1650, res=200);
+DimPlot(hecaNH, reduction="umap", group.by="celltype", label=F, raster=TRUE);
+dev.off();
+png("UMAP-hecaNH.withLabels.png", h=800, w=770, res=200);
+DimPlot(hecaNH, reduction="umap", group.by="celltype", label=T, label.size=2, repel=TRUE, raster=TRUE)+NoLegend();
+dev.off();
+png("UMAP-m2h-predicted.png", h=800, w=770, res=200);
+DimPlot(objM2H, reduction="ref.umap", group.by="predicted.id", label=T, label.size=2, repel=TRUE, raster=TRUE)+NoLegend();
+dev.off();
+png("UMAP-m2h-ourassi.png", h=800, w=770, res=200);
+DimPlot(objM2H, reduction="ref.umap", group.by="CellType", label=T, label.size=2, repel=TRUE, raster=TRUE)+NoLegend();
+dev.off();
+
+## write UMAP coordinates
+write.table("UMAP_coordinates.hecaNH.txt", x=as.matrix(hecaNH@reductions$umap@cell.embeddings), quote=F, append=F, col.names=F, sep="\t");
+write.table("UMAP_coordinates.projected_mouse.txt", x=as.matrix(objM2H@reductions$ref.umap@cell.embeddings), quote=F, append=F, col.names=F, sep="\t");
+
+## write default colors from hecaNH umap (to use later)
+library(scales);
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+pal <- gg_color_hue(36);
+write.table("colors_hecaNH.txt", x=as.matrix(pal), quote=F, append=F, col.names=F, row.names=F);
+write.table("celltypes_hecaNH.txt", x=as.matrix(levels(hecaNH$celltype)), quote=F, append=F, col.names=F, row.names=F);  # ordered list of cell types matching the colors
+rm(pal,gg_color_hue);
+
+## save working image
+save.image("mouse_to_hecaNH_projection.03mar2025.RData");
+
+
+
+
+## other -- view distribution of transfer/prediction scores
+objCtrl <- subset(objM2H, subset = genotype == "Ctrl");
+objSrfKO <- subset(objM2H, subset = genotype == "SrfKO");
+scoresCtrl <- sort(objCtrl$prediction.score.max);
+scoresSrfKO <- sort(objSrfKO$prediction.score.max);
+png("TransPredScoreDistr.Ctrl.png", h=800, w=800, res=200);
+plot(x=seq(1,length(scoresCtrl),1), y=scoresCtrl, col="blue", pch=20, xlim=c(0,length(scoresCtrl)), ylim=c(0,1), xlab="Ordered Cells", ylab="Transfer Prediction Score", main="Ctrl");
+dev.off();
+png("TransPredScoreDistr.SrfKO.png", h=800, w=800, res=200);
+plot(x=seq(1,length(scoresSrfKO),1), y=scoresSrfKO, col="blue", pch=20, xlim=c(0,length(scoresSrfKO)), ylim=c(0,1), xlab="Ordered Cells", ylab="Transfer Prediction Score", main="SrfKO");
+dev.off();
+system("convert TransPredScoreDistr.Ctrl.png TransPredScoreDistr.SrfKO.png +append TransPredScoreDistr.png");

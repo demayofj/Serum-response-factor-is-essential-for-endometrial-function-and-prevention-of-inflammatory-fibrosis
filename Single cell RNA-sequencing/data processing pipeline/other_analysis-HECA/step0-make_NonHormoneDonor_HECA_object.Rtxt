@@ -1,0 +1,16 @@
+library(Seurat);
+
+## make HECA object excluding hormone-treated patients
+## also, rename metadata columns that have spaces or start with numbers because those are annoying to work with
+Idents(heca) <- "Hormonal treatment";
+hecaNH <- subset(heca, idents=c("-","nan"));
+hecaNH$Hormonal_treatment <- Idents(hecaNH);
+hecaNH[['Hormonal treatment']] <- NULL;
+hecaNH$Tenx_kit <- hecaNH[['10x kit']];
+hecaNH[['10x kit']] <- NULL;
+hecaNH$Binary_Stage <- hecaNH[['Binary Stage']];
+hecaNH[['Binary Stage']] <- NULL;
+saveRDS(hecaNH, "/ddn/gs1/home/grimmsa/RyanMarquardt/HECA/method_MuDataSeurat/endometriumAtlasV2_cells_with_counts-NonHormoneDonors.Seurat.rds");
+
+
+### NOTE: the resulting object retains all features generated with the full HECA object (UMAP coordinates, variable features, etc) !!!

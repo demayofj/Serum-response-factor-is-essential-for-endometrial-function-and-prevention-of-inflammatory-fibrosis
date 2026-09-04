@@ -1,0 +1,36 @@
+library(Seurat);
+
+ryan <- readRDS("/ddn/gs1/home/grimmsa/RyanMarquardt/Project_SRF_adult_Jan2025/save_rds/RM-adult_SrfKO-FilteredIntegratedAnnotated.04feb2025.rds");
+
+genelistM <- rownames(ryan@assays$RNA);
+
+translatePairs <- read.delim("genelist_ortholog_mouse2human_translation.txt", header=FALSE);
+gene_df <- data.frame(geneMouse=translatePairs$V1, geneUse=translatePairs$V2);
+gene_df_ordered <- gene_df[order(factor(gene_df$geneMouse,levels=genelistM)),];
+
+mtx_counts <- as.matrix(ryan@assays$RNA$counts);
+mtx_data <- as.matrix(ryan@assays$RNA$data);
+
+rownames(mtx_counts) <- gene_df_ordered$geneUse;
+rownames(mtx_data) <- gene_df_ordered$geneUse;
+
+ryanRenamedGenes <- CreateSeuratObject(counts=mtx_counts, data=mtx_data, meta.data=ryan@meta.data);
+ryanRenamedGenes[['pca']] <- ryan[['pca']];
+ryanRenamedGenes[['umap']] <- ryan[['umap']];
+ryanRenamedGenes[['integrated.rpca']] <- ryan[['integrated.rpca']];
+saveRDS(ryanRenamedGenes, "RM-adult_SrfKO-HumanOrthoGeneNames.28feb2025.rds");
+
+
+### make a few feature plots with mouse/human symbol to confirm that the renaming worked as expected
+gm <- "Pdgfra"; gh <- "PDGFRA"; label <- "fibroblast";
+gm <- "Flt1"; gh <- "FLT1"; label <- "endothelial";
+gm <- "Cdh1"; gh <- "CDH1"; label <- "epithelial";
+gm <- "C1qa"; gh <- "C1QA"; label <- "macrophage";
+  pngfile1 <- paste("adult_SrfKO.FeaturePlot-mouse_name-", gm, ".png", sep="");
+  pngfile2 <- paste("adult_SrfKO.FeaturePlot-human_name-", gh, ".png", sep="");
+  pngfile3 <- paste("adult_SrfKO.FeaturePlot-", gm, "-", gh, "-", label, ".png", sep="");
+  png(pngfile1, h=800, w=900, res=200); FeaturePlot(ryan, features=gm, pt.size=0.2); dev.off();
+  png(pngfile2, h=800, w=900, res=200); FeaturePlot(ryanRenamedGenes, features=gh, pt.size=0.2); dev.off();
+  command <- paste("convert", pngfile1, pngfile2, "+append", pngfile3, sep=" ");
+  system(command);
+
